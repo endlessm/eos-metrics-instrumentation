@@ -1,0 +1,5 @@
+eos-metrics-instrumentation (0.0.0) UNRELEASED; urgency=low
+
+  * Initial release. (Closes: #761)
+
+ -- Kurt von Laven <kurt@endlessm.com>  Thu, 20 Mar 2014 10:00:34 -0700

@@ -1,0 +1,23 @@
+eos-metrics-instrumentation
+*.o
+
+# Backup files
+*~
+
+# Autotools droppings
+.deps
+stamp*
+*.stamp
+*.tar.*
+*.pc
+Makefile
+Makefile.in
+gtk-doc.make
+/aclocal.m4
+/autom4te.cache
+/compile
+/config.*
+/configure
+/depcomp
+/install-sh
+/missing
