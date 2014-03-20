@@ -13,9 +13,6 @@ stamp*
 Makefile
 Makefile.in
 gtk-doc.make
-ar-lib
-libtool
-ltmain.sh
 /aclocal.m4
 /autom4te.cache
 /compile

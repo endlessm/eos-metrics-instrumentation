@@ -6,3 +6,9 @@ eos_metrics_instrumentation_SOURCES = \
 	src/eos-metrics-instrumentation.h \
 	src/eos-metrics-instrumentation.c \
 	$(NULL)
+
+# Pre-processor flags
+AM_CPPFLAGS = $(EOS_INSTRUMENTATION_CFLAGS)
+
+# Libraries to link against
+eos_metrics_instrumentation_LDADD = $(EOS_INSTRUMENTATION_LIBS)
