@@ -1,0 +1,12 @@
+[Unit]
+Description=EndlessOS Metrics Instrumentation
+Requires=dbus.service
+After=dbus.service
+Before=dbus-org.freedesktop.login1.service systemd-logind.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/libexec/eos-metrics-instrumentation
+
+[Install]
+WantedBy=multi-user.target
