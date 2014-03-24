@@ -1,7 +1,7 @@
 # Bootstrap script for EndlessOS Metrics Instrumentation
 # Run this script on a clean source checkout to get ready for building.
 
-FILE_MUST_EXIST="src/eos-metrics-instrumentation.h"
+FILE_MUST_EXIST="src/eos-metrics-instrumentation.c"
 
 test -n "$srcdir" || srcdir=`dirname "$0"`
 test -n "$srcdir" || srcdir=.

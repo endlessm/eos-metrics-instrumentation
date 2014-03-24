@@ -9,6 +9,8 @@
 
 ACLOCAL_AMFLAGS = -I m4
 
+SUBDIRS = data
+
 # Extra files to distribute in the tarball
 EXTRA_DIST = README.md
 
