@@ -74,6 +74,8 @@ AC_PROG_MKDIR_P
 AC_PROG_CC
 # Make sure the C compiler supports per-target CFLAGS
 AM_PROG_CC_C_O
+# Intializes PKG_CONFIG variable so that systemdsystemunitdir can be found.
+PKG_PROG_PKG_CONFIG
 
 AC_CACHE_SAVE
 
@@ -119,6 +121,9 @@ AS_CASE([$enable_strict_flags],
 dnl Strip leading spaces
 STRICT_CFLAGS=${STRICT_CFLAGS#*  }
 AC_SUBST(STRICT_CFLAGS)
+
+systemdsystemunitdir="$($PKG_CONFIG systemd --variable=systemdsystemunitdir)"
+AC_SUBST(systemdsystemunitdir)
 
 # Required libraries
 # ------------------
