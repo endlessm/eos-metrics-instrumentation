@@ -2,10 +2,7 @@
 
 libexec_PROGRAMS = eos-metrics-instrumentation
 
-eos_metrics_instrumentation_SOURCES = \
-	src/eos-metrics-instrumentation.h \
-	src/eos-metrics-instrumentation.c \
-	$(NULL)
+eos_metrics_instrumentation_SOURCES = src/eos-metrics-instrumentation.c
 
 # Pre-processor flags
 AM_CPPFLAGS = $(EOS_INSTRUMENTATION_CFLAGS)
