@@ -28,3 +28,6 @@ DISTCLEANFILES =
 
 # Instrumentation
 include $(top_srcdir)/src/Makefile.am.inc
+
+# Daemon Configuration
+include $(top_srcdir)/data/Makefile.am.inc

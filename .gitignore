@@ -13,6 +13,7 @@ stamp*
 Makefile
 Makefile.in
 gtk-doc.make
+data/eos-metrics-instrumentation.service
 /aclocal.m4
 /autom4te.cache
 /compile
