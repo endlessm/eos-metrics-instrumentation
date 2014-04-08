@@ -9,4 +9,4 @@ Type=simple
 ExecStart=@libexecdir@/eos-metrics-instrumentation
 
 [Install]
-WantedBy=sysinit.target
+WantedBy=multi-user.target
