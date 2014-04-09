@@ -2,6 +2,7 @@
 
 #include <gio/gio.h>
 #include <glib.h>
+#include <glib-unix.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -19,7 +20,7 @@
 static EmtrEventRecorder *event_recorder;
 
 // Protected by humanity_by_session_id lock.
-static GData * humanity_by_session_id;
+static GData *humanity_by_session_id;
 
 G_LOCK_DEFINE_STATIC (humanity_by_session_id);
 
@@ -234,6 +235,14 @@ login_dbus_proxy_new ()
     return dbus_proxy;
 }
 
+static gboolean
+quit_main_loop (gpointer user_data)
+{
+    GMainLoop *main_loop = (GMainLoop *) user_data;
+    g_main_loop_quit (main_loop);
+    return G_SOURCE_REMOVE;
+}
+
 int
 main(int                argc,
      const char * const argv[])
@@ -242,13 +251,17 @@ main(int                argc,
     g_datalist_init (&humanity_by_session_id);
     GDBusProxy *login_dbus_proxy = login_dbus_proxy_new ();
     GMainLoop *main_loop = g_main_loop_new (NULL, TRUE);
+    g_unix_signal_add (SIGHUP, quit_main_loop, main_loop);
+    g_unix_signal_add (SIGINT, quit_main_loop, main_loop);
+    g_unix_signal_add (SIGTERM, quit_main_loop, main_loop);
+    g_unix_signal_add (SIGUSR1, quit_main_loop, main_loop);
+    g_unix_signal_add (SIGUSR2, quit_main_loop, main_loop);
     g_main_loop_run (main_loop);
 
     g_main_loop_unref (main_loop);
     g_clear_object (&login_dbus_proxy);
     G_LOCK (humanity_by_session_id);
     g_datalist_clear (&humanity_by_session_id);
-    g_object_unref (humanity_by_session_id);
     G_UNLOCK (humanity_by_session_id);
     g_object_unref (event_recorder);
     stop_inhibiting_shutdown ();
