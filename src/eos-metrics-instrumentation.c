@@ -235,6 +235,62 @@ login_dbus_proxy_new ()
     return dbus_proxy;
 }
 
+static volatile guint32 previous_network_state = 0; // NM_STATE_UNKNOWM
+
+G_LOCK_DEFINE_STATIC (previous_network_state);
+
+static void
+record_network_change (GDBusProxy *dbus_proxy,
+                       gchar      *sender_name,
+                       gchar      *signal_name,
+                       GVariant   *parameters,
+                       gpointer    user_data)
+{
+    if (strcmp ("StateChanged", signal_name) == 0)
+      {
+        guint32 new_network_state;
+        g_variant_get(parameters, "(u)", &new_network_state);
+
+        G_LOCK (previous_network_state);
+
+        GVariant *status_change = g_variant_new("(uu)", previous_network_state,
+                                                new_network_state);
+
+        emtr_event_recorder_record_event (event_recorder,
+                                          EMTR_EVENT_NETWORK_STATUS_CHANGED,
+                                          status_change);
+
+        previous_network_state = new_network_state;
+
+        G_UNLOCK (previous_network_state);
+      }
+}
+
+static GDBusProxy *
+network_dbus_proxy_new ()
+{
+    GError *error = NULL;
+    GDBusProxy *dbus_proxy =
+      g_dbus_proxy_new_for_bus_sync (G_BUS_TYPE_SYSTEM,
+                                     G_DBUS_PROXY_FLAGS_NONE,
+                                     NULL /* GDBusInterfaceInfo */,
+                                     "org.freedesktop.NetworkManager",
+                                     "/org/freedesktop/NetworkManager",
+                                     "org.freedesktop.NetworkManager",
+                                     NULL /* GCancellable */, &error);
+    if (dbus_proxy == NULL)
+      {
+        g_warning ("Error creating GDBusProxy: %s\n", error->message);
+        g_error_free (error);
+      }
+    else
+      {
+        g_signal_connect (dbus_proxy, "g-signal", G_CALLBACK (record_network_change),
+                          NULL /* data */);
+      }
+    return dbus_proxy;
+}
+
 static gboolean
 quit_main_loop (gpointer user_data)
 {
@@ -250,6 +306,7 @@ main(int                argc,
     event_recorder = emtr_event_recorder_new ();
     g_datalist_init (&humanity_by_session_id);
     GDBusProxy *login_dbus_proxy = login_dbus_proxy_new ();
+    GDBusProxy *network_dbus_proxy = network_dbus_proxy_new ();
     GMainLoop *main_loop = g_main_loop_new (NULL, TRUE);
     g_unix_signal_add (SIGHUP, quit_main_loop, main_loop);
     g_unix_signal_add (SIGINT, quit_main_loop, main_loop);
@@ -260,6 +317,7 @@ main(int                argc,
 
     g_main_loop_unref (main_loop);
     g_clear_object (&login_dbus_proxy);
+    g_clear_object (&network_dbus_proxy);
     G_LOCK (humanity_by_session_id);
     g_datalist_clear (&humanity_by_session_id);
     G_UNLOCK (humanity_by_session_id);
