@@ -291,6 +291,59 @@ network_dbus_proxy_new ()
     return dbus_proxy;
 }
 
+static void
+record_social_bar_change (GDBusProxy *dbus_proxy,
+                          gchar      *sender_name,
+                          gchar      *signal_name,
+                          GVariant   *parameters,
+                          gpointer    user_data)
+  {
+    if (strcmp ("PropertiesChanged", signal_name) == 0)
+      {
+        GVariant *propeties_changed_dictionary = g_variant_get_child_value (parameters, 1);
+        GVariant *visibility_wrapper = g_variant_lookup_value (propeties_changed_dictionary, 
+                                                               "Visible", 
+                                                               G_VARIANT_TYPE_BOOLEAN);
+        gboolean is_visible = g_variant_get_boolean (visibility_wrapper);
+        
+        if (is_visible)
+            emtr_event_recorder_record_start (event_recorder,
+                                              EMTR_EVENT_SOCIAL_BAR_VISIBLE,
+                                              NULL,
+                                              NULL);
+        else
+            emtr_event_recorder_record_stop (event_recorder,
+                                             EMTR_EVENT_SOCIAL_BAR_VISIBLE,
+                                             NULL,
+                                             NULL);
+      }
+}
+
+static GDBusProxy *
+social_bar_dbus_proxy_new ()
+{
+    GError *error = NULL;
+    GDBusProxy *dbus_proxy =
+      g_dbus_proxy_new_for_bus_sync (G_BUS_TYPE_SESSION,
+                                     G_DBUS_PROXY_FLAGS_NONE,
+                                     NULL /* GDBusInterfaceInfo */,
+                                     "com.endlessm.SocialBar",
+                                     "/com/endlessm/SocialBar",
+                                     "org.freedesktop.DBus.Properties",
+                                     NULL /* GCancellable */, &error);
+    if (dbus_proxy == NULL)
+      {
+        g_warning ("Error creating GDBusProxy: %s\n", error->message);
+        g_error_free (error);
+      }
+    else
+      {
+        g_signal_connect (dbus_proxy, "g-signal", G_CALLBACK (record_social_bar_change),
+                          NULL /* data */);
+      }
+    return dbus_proxy;
+}
+
 static gboolean
 quit_main_loop (gpointer user_data)
 {
@@ -307,6 +360,7 @@ main(int                argc,
     g_datalist_init (&humanity_by_session_id);
     GDBusProxy *login_dbus_proxy = login_dbus_proxy_new ();
     GDBusProxy *network_dbus_proxy = network_dbus_proxy_new ();
+    GDBusProxy *social_bar_dbus_proxy = social_bar_dbus_proxy_new ();
     GMainLoop *main_loop = g_main_loop_new (NULL, TRUE);
     g_unix_signal_add (SIGHUP, quit_main_loop, main_loop);
     g_unix_signal_add (SIGINT, quit_main_loop, main_loop);
@@ -318,6 +372,7 @@ main(int                argc,
     g_main_loop_unref (main_loop);
     g_clear_object (&login_dbus_proxy);
     g_clear_object (&network_dbus_proxy);
+    g_clear_object (&social_bar_dbus_proxy);
     G_LOCK (humanity_by_session_id);
     g_datalist_clear (&humanity_by_session_id);
     G_UNLOCK (humanity_by_session_id);
