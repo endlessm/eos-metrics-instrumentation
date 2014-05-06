@@ -15,9 +15,11 @@ EXTRA_DIST = README.md
 # Compiler flags
 AM_CFLAGS = @STRICT_CFLAGS@
 
-# Make sure to use strict compiler flags when doing 'make distcheck'
+# Make sure to use strict compiler flags when doing 'make distcheck', and
+# trick Automake into not installing something outside of $(prefix)
 AM_DISTCHECK_CONFIGURE_FLAGS = \
         --enable-strict-flags \
+        --with-systemdsystemunitdir='$${libdir}/systemd/system' \
         $(NULL)
 
 # Generated files that 'make clean' should erase

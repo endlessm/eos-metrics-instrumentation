@@ -124,7 +124,12 @@ STRICT_CFLAGS=${STRICT_CFLAGS#*  }
 AC_SUBST(STRICT_CFLAGS)
 
 systemdsystemunitdir="$($PKG_CONFIG systemd --variable=systemdsystemunitdir)"
-AC_SUBST(systemdsystemunitdir)
+dnl Allow overriding systemdsystemunitdir during distcheck in order to trick
+dnl Automake into allowing an install outside of $prefix
+AC_ARG_WITH([systemdsystemunitdir],
+    [AS_HELP_STRING([--with-systemdsystemunitdir=PATH], [directory for systemd service files])],
+    [systemdsystemunitdir="$withval"])
+AC_SUBST([systemdsystemunitdir])
 
 # Required libraries
 # ------------------
