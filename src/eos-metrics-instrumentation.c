@@ -181,7 +181,7 @@ record_login (GDBusProxy *dbus_proxy,
         maybe_inhibit_shutdown (dbus_proxy);
         GVariant *session_id = g_variant_get_child_value (parameters, 0);
         emtr_event_recorder_record_start (event_recorder,
-                                          EMTR_EVENT_USER_LOGGED_IN, session_id,
+                                          EMTR_EVENT_USER_IS_LOGGED_IN, session_id,
                                           NULL /* auxiliary_payload */);
         g_variant_unref (session_id);
       }
@@ -190,7 +190,7 @@ record_login (GDBusProxy *dbus_proxy,
       {
         GVariant *session_id = g_variant_get_child_value (parameters, 0);
         emtr_event_recorder_record_stop (event_recorder,
-                                         EMTR_EVENT_USER_LOGGED_IN, session_id,
+                                         EMTR_EVENT_USER_IS_LOGGED_IN, session_id,
                                          NULL /* auxiliary_payload */);
         g_variant_unref (session_id);
         stop_inhibiting_shutdown ();
