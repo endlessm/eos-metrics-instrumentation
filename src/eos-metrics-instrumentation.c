@@ -17,8 +17,6 @@
 #define MODE "delay"
 #define INHIBIT_ARGS "('" WHAT "', '" WHO "', '" WHY "', '" MODE "')"
 
-static EmtrEventRecorder *event_recorder;
-
 // Protected by humanity_by_session_id lock.
 static GData *humanity_by_session_id;
 
@@ -180,7 +178,7 @@ record_login (GDBusProxy *dbus_proxy,
       {
         maybe_inhibit_shutdown (dbus_proxy);
         GVariant *session_id = g_variant_get_child_value (parameters, 0);
-        emtr_event_recorder_record_start (event_recorder,
+        emtr_event_recorder_record_start (emtr_event_recorder_get_default (),
                                           EMTR_EVENT_USER_IS_LOGGED_IN, session_id,
                                           NULL /* auxiliary_payload */);
         g_variant_unref (session_id);
@@ -189,7 +187,7 @@ record_login (GDBusProxy *dbus_proxy,
              remove_is_human_session (parameters))
       {
         GVariant *session_id = g_variant_get_child_value (parameters, 0);
-        emtr_event_recorder_record_stop (event_recorder,
+        emtr_event_recorder_record_stop (emtr_event_recorder_get_default (),
                                          EMTR_EVENT_USER_IS_LOGGED_IN, session_id,
                                          NULL /* auxiliary_payload */);
         g_variant_unref (session_id);
@@ -256,7 +254,7 @@ record_network_change (GDBusProxy *dbus_proxy,
         GVariant *status_change = g_variant_new("(uu)", previous_network_state,
                                                 new_network_state);
 
-        emtr_event_recorder_record_event (event_recorder,
+        emtr_event_recorder_record_event (emtr_event_recorder_get_default (),
                                           EMTR_EVENT_NETWORK_STATUS_CHANGED,
                                           status_change);
 
@@ -303,7 +301,6 @@ int
 main(int                argc,
      const char * const argv[])
 {
-    event_recorder = emtr_event_recorder_new ();
     g_datalist_init (&humanity_by_session_id);
     GDBusProxy *login_dbus_proxy = login_dbus_proxy_new ();
     GDBusProxy *network_dbus_proxy = network_dbus_proxy_new ();
@@ -321,7 +318,6 @@ main(int                argc,
     G_LOCK (humanity_by_session_id);
     g_datalist_clear (&humanity_by_session_id);
     G_UNLOCK (humanity_by_session_id);
-    g_object_unref (event_recorder);
     stop_inhibiting_shutdown ();
     return EXIT_SUCCESS;
 }
