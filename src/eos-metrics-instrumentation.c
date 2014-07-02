@@ -3,6 +3,8 @@
 #include <gio/gio.h>
 #include <glib.h>
 #include <glib-unix.h>
+#include <glib/gstdio.h>
+#include <gio/gunixfdlist.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -10,6 +12,8 @@
 #include <eosmetrics/eosmetrics.h>
 
 #define MIN_HUMAN_USER_ID 1000
+
+#define SHUTDOWN_INHIBITOR_UNSET -1
 
 #define WHAT "shutdown"
 #define WHO "EndlessOS Metrics Instrumentation Daemon"
@@ -23,10 +27,7 @@ static GData *humanity_by_session_id;
 G_LOCK_DEFINE_STATIC (humanity_by_session_id);
 
 // Protected by shutdown_inhibitor lock.
-static volatile FILE * volatile shutdown_inhibitor = NULL;
-
-// Protected by shutdown_inhibitor lock.
-static volatile gboolean should_inhibit_shutdown = TRUE;
+static volatile gint shutdown_inhibitor = SHUTDOWN_INHIBITOR_UNSET;
 
 G_LOCK_DEFINE_STATIC (shutdown_inhibitor);
 
@@ -61,7 +62,7 @@ is_human_session (GVariant *session_parameters)
                                                     -1 /* timeout */,
                                                     NULL /* GCancellable */,
                                                     &error);
- 
+
     if (user_result == NULL)
       {
         g_warning ("Error getting user ID: %s\n", error->message);
@@ -117,48 +118,70 @@ static void
 maybe_inhibit_shutdown (GDBusProxy *dbus_proxy)
 {
     G_LOCK (shutdown_inhibitor);
-    if (should_inhibit_shutdown)
+    if (shutdown_inhibitor == SHUTDOWN_INHIBITOR_UNSET)
       {
         GVariant *inhibit_args = g_variant_new_parsed (INHIBIT_ARGS);
         GError *error = NULL;
+        GUnixFDList *fd_list = NULL;
         GVariant *inhibitor_tuple =
-          g_dbus_proxy_call_sync (dbus_proxy, "Inhibit", inhibit_args,
-                                  G_DBUS_CALL_FLAGS_NONE, -1 /* timeout */,
-                                  NULL /* GCancellable */, &error);
+          g_dbus_proxy_call_with_unix_fd_list_sync (dbus_proxy, "Inhibit",
+                                                    inhibit_args,
+                                                    G_DBUS_CALL_FLAGS_NONE,
+                                                    -1 /* timeout */,
+                                                    NULL /* input fd_list */,
+                                                    &fd_list /* out fd_list */,
+                                                    NULL /* GCancellable */,
+                                                    &error);
         if (inhibitor_tuple == NULL)
           {
+            if (fd_list != NULL)
+              g_object_unref (fd_list);
             g_warning ("Error inhibiting shutdown: %s\n", error->message);
             g_error_free (error);
+            G_UNLOCK (shutdown_inhibitor);
+            return;
           }
-        else
+
+        g_variant_unref (inhibitor_tuple);
+
+        gint fd_list_length;
+        gint *fds = g_unix_fd_list_steal_fds (fd_list, &fd_list_length);
+        g_object_unref (fd_list);
+        if (fd_list_length != 1)
           {
-            g_variant_get_child (inhibitor_tuple, 0, "h", &shutdown_inhibitor);
-            g_variant_unref (inhibitor_tuple);
-            // There is no value in inhibiting shutdown twice in one boot.
-            should_inhibit_shutdown = FALSE;
+            g_warning ("Error inhibiting shutdown. Login manager returned %d "
+                       "file descriptors, but we expected 1 file descriptor.",
+                       fd_list_length);
+            G_UNLOCK (shutdown_inhibitor);
+            return;
           }
+        shutdown_inhibitor = fds[0];
+        g_free (fds);
+        G_UNLOCK (shutdown_inhibitor);
       }
-    G_UNLOCK (shutdown_inhibitor);
 }
 
 static void
-stop_inhibiting_shutdown ()
+stop_inhibiting_shutdown (void)
 {
     G_LOCK (shutdown_inhibitor);
 
-    // We are done recording metrics.
-    should_inhibit_shutdown = FALSE;
-
-    if (shutdown_inhibitor != NULL)
+    if (shutdown_inhibitor != SHUTDOWN_INHIBITOR_UNSET)
       {
-        FILE * volatile previous_shutdown_inhibitor =
-          (FILE * volatile) shutdown_inhibitor;
-        shutdown_inhibitor = NULL;
+        gint volatile previous_shutdown_inhibitor = shutdown_inhibitor;
+        shutdown_inhibitor = SHUTDOWN_INHIBITOR_UNSET;
         G_UNLOCK (shutdown_inhibitor);
+
+        GError *error = NULL;
 
         // If the system is shutting down, this daemon may be killed at any
         // point after this statement.
-        fclose (previous_shutdown_inhibitor);
+        if (!g_close (previous_shutdown_inhibitor, &error))
+          {
+            g_warning ("Failed to release shutdown inhibitor. Error: %s.",
+                       error->message);
+            g_error_free (error);
+          }
       }
     else
       {
@@ -197,19 +220,13 @@ record_login (GDBusProxy *dbus_proxy,
       {
         gboolean before_shutdown;
         g_variant_get_child (parameters, 0, "b", &before_shutdown);
-        if (before_shutdown)
-          {
-            G_LOCK (shutdown_inhibitor);
-            // It is an error to inhibit shutdown after the PrepareForShutdown
-            // signal has been sent with its parameter set to TRUE.
-            should_inhibit_shutdown = FALSE;
-            G_UNLOCK (shutdown_inhibitor);
-          }
+        if (!before_shutdown)
+          maybe_inhibit_shutdown (dbus_proxy);
       }
 }
 
 static GDBusProxy *
-login_dbus_proxy_new ()
+login_dbus_proxy_new (void)
 {
     GError *error = NULL;
     GDBusProxy *dbus_proxy =
@@ -265,7 +282,7 @@ record_network_change (GDBusProxy *dbus_proxy,
 }
 
 static GDBusProxy *
-network_dbus_proxy_new ()
+network_dbus_proxy_new (void)
 {
     GError *error = NULL;
     GDBusProxy *dbus_proxy =
