@@ -62,6 +62,7 @@ is_human_session (GVariant *session_parameters)
                                                     -1 /* timeout */,
                                                     NULL /* GCancellable */,
                                                     &error);
+    g_object_unref (dbus_proxy);
 
     if (user_result == NULL)
       {
@@ -152,6 +153,7 @@ maybe_inhibit_shutdown (GDBusProxy *dbus_proxy)
             g_warning ("Error inhibiting shutdown. Login manager returned %d "
                        "file descriptors, but we expected 1 file descriptor.",
                        fd_list_length);
+            g_free (fds);
             G_UNLOCK (shutdown_inhibitor);
             return;
           }
@@ -274,6 +276,7 @@ record_network_change (GDBusProxy *dbus_proxy,
         emtr_event_recorder_record_event (emtr_event_recorder_get_default (),
                                           EMTR_EVENT_NETWORK_STATUS_CHANGED,
                                           status_change);
+        g_variant_unref (status_change);
 
         previous_network_state = new_network_state;
 
