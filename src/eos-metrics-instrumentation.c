@@ -139,8 +139,7 @@ maybe_inhibit_shutdown (GDBusProxy *dbus_proxy)
               g_object_unref (fd_list);
             g_warning ("Error inhibiting shutdown: %s\n", error->message);
             g_error_free (error);
-            G_UNLOCK (shutdown_inhibitor);
-            return;
+            goto finally;
           }
 
         g_variant_unref (inhibitor_tuple);
@@ -154,13 +153,14 @@ maybe_inhibit_shutdown (GDBusProxy *dbus_proxy)
                        "file descriptors, but we expected 1 file descriptor.",
                        fd_list_length);
             g_free (fds);
-            G_UNLOCK (shutdown_inhibitor);
-            return;
+            goto finally;
           }
         shutdown_inhibitor = fds[0];
         g_free (fds);
-        G_UNLOCK (shutdown_inhibitor);
       }
+
+finally:
+    G_UNLOCK (shutdown_inhibitor);
 }
 
 static void
