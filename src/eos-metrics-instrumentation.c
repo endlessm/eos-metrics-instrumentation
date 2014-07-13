@@ -31,6 +31,10 @@ static volatile gint shutdown_inhibitor = SHUTDOWN_INHIBITOR_UNSET;
 
 G_LOCK_DEFINE_STATIC (shutdown_inhibitor);
 
+/*
+ * Return TRUE if the given parameters of a SessionNew or SessionRemoved signal
+ * correspond to a human session. Otherwise, return FALSE.
+ */
 static gboolean
 is_human_session (GVariant *session_parameters)
 {
@@ -81,42 +85,73 @@ is_human_session (GVariant *session_parameters)
     return user_id >= MIN_HUMAN_USER_ID;
 }
 
+/*
+ * If the given parameters of a SessionNew or SessionRemoved signal correspond
+ * to a human session, return TRUE and add the corresponding session_id to the
+ * humanity_by_session_id set. Otherwise, return FALSE.
+ */
 static gboolean
-set_is_human_session (GVariant *session_parameters)
+add_session_to_set (GVariant *session_parameters)
 {
-    gboolean *ptr_to_humanity = g_new (gboolean, 1);
-    *ptr_to_humanity = is_human_session (session_parameters);
+    if (!is_human_session (session_parameters))
+      return FALSE;
+
     gchar *session_id;
     g_variant_get_child (session_parameters, 0, "s", &session_id);
     G_LOCK (humanity_by_session_id);
-    g_datalist_set_data_full (&humanity_by_session_id, session_id,
-                              ptr_to_humanity, g_free);
+    g_datalist_set_data (&humanity_by_session_id, session_id, (gpointer) TRUE);
     G_UNLOCK (humanity_by_session_id);
     g_free (session_id);
-    return *ptr_to_humanity;
+    return TRUE;
 }
 
+/*
+ * If the given parameters of a SessionNew or SessionRemoved signal correspond
+ * to a human session that is currently in the humanity_by_session_id set,
+ * return TRUE and remove the session from the set. Otherwise, return FALSE.
+ */
 static gboolean
-remove_is_human_session (GVariant *session_parameters)
+remove_session_from_set (GVariant *session_parameters)
 {
     gchar *session_id;
     g_variant_get_child (session_parameters, 0, "s", &session_id);
+
     G_LOCK (humanity_by_session_id);
-    gboolean *ptr_to_humanity = g_datalist_get_data (&humanity_by_session_id,
-                                                     session_id);
-    gboolean is_human = FALSE;
-    if (ptr_to_humanity != NULL)
-      {
-        is_human = *ptr_to_humanity;
-        g_datalist_remove_data (&humanity_by_session_id, session_id);
-      }
+    gboolean is_human = (gboolean) g_datalist_get_data (&humanity_by_session_id,
+                                                        session_id);
+
+    if (is_human)
+      g_datalist_remove_data (&humanity_by_session_id, session_id);
+
     G_UNLOCK (humanity_by_session_id);
+
     g_free (session_id);
     return is_human;
 }
 
+/*
+ * Intended for use as a GDataForeachFunc callback. Records a logout for the
+ * given session ID.
+ */
 static void
-maybe_inhibit_shutdown (GDBusProxy *dbus_proxy)
+record_stop_for_login (GQuark   session_id_quark,
+                       gpointer unused,
+                       gpointer user_data)
+{
+    const gchar *session_id = g_quark_to_string (session_id_quark);
+    GVariant *session_id_variant = g_variant_new_string (session_id);
+    emtr_event_recorder_record_stop (emtr_event_recorder_get_default (),
+                                     EMTR_EVENT_USER_IS_LOGGED_IN,
+                                     session_id_variant,
+                                     NULL /* auxiliary_payload */);
+    g_variant_unref (session_id_variant);
+}
+
+/*
+ * Inhibit shutdown if we don't already hold a valid shutdown inhibitor.
+ */
+static void
+inhibit_shutdown (GDBusProxy *dbus_proxy)
 {
     G_LOCK (shutdown_inhibitor);
     if (shutdown_inhibitor == SHUTDOWN_INHIBITOR_UNSET)
@@ -163,6 +198,10 @@ finally:
     G_UNLOCK (shutdown_inhibitor);
 }
 
+/*
+ * Stop inhibiting shutdown unless we don't hold a shutdown inhibitor in the
+ * first place.
+ */
 static void
 stop_inhibiting_shutdown (void)
 {
@@ -191,6 +230,19 @@ stop_inhibiting_shutdown (void)
       }
 }
 
+/*
+ * Handle a signal from the login manager by recording login/logout pairs. Make
+ * the aggressive assumption that all sessions end when the PrepareForShutdown
+ * signal is sent with parameter TRUE. This isn't necessarily a valid assumption
+ * because the shutdown can be cancelled, but in practice we don't get the
+ * SessionRemoved signal in time if the user shuts down without first logging
+ * out.
+ *
+ * Recording of logins must be 1:1 with recording of logouts, so each time
+ * we record a login we add the session ID to the humanity_by_session_id set,
+ * and each time we record a logout we remove the session ID from the
+ * humanity_by_session_id set.
+ */
 static void
 record_login (GDBusProxy *dbus_proxy,
               gchar      *sender_name,
@@ -198,32 +250,43 @@ record_login (GDBusProxy *dbus_proxy,
               GVariant   *parameters,
               gpointer    user_data)
 {
-    if (strcmp ("SessionNew", signal_name) == 0 &&
-        set_is_human_session (parameters))
+    if (strcmp ("PrepareForShutdown", signal_name) == 0)
       {
-        maybe_inhibit_shutdown (dbus_proxy);
-        GVariant *session_id = g_variant_get_child_value (parameters, 0);
-        emtr_event_recorder_record_start (emtr_event_recorder_get_default (),
-                                          EMTR_EVENT_USER_IS_LOGGED_IN, session_id,
-                                          NULL /* auxiliary_payload */);
-        g_variant_unref (session_id);
+        gboolean shutting_down;
+        g_variant_get_child (parameters, 0, "b", &shutting_down);
+        if (shutting_down)
+          {
+            G_LOCK (humanity_by_session_id);
+            g_datalist_foreach (&humanity_by_session_id,
+                                (GDataForeachFunc) record_stop_for_login,
+                                NULL /* user_data */);
+            g_datalist_clear (&humanity_by_session_id);
+            G_UNLOCK (humanity_by_session_id);
+            stop_inhibiting_shutdown ();
+          }
+        else
+          {
+            inhibit_shutdown (dbus_proxy);
+          }
       }
     else if (strcmp ("SessionRemoved", signal_name) == 0 &&
-             remove_is_human_session (parameters))
+             remove_session_from_set (parameters))
       {
         GVariant *session_id = g_variant_get_child_value (parameters, 0);
         emtr_event_recorder_record_stop (emtr_event_recorder_get_default (),
                                          EMTR_EVENT_USER_IS_LOGGED_IN, session_id,
                                          NULL /* auxiliary_payload */);
         g_variant_unref (session_id);
-        stop_inhibiting_shutdown ();
       }
-    else if (strcmp ("PrepareForShutdown", signal_name) == 0)
+    else if (strcmp ("SessionNew", signal_name) == 0 &&
+             add_session_to_set (parameters))
       {
-        gboolean before_shutdown;
-        g_variant_get_child (parameters, 0, "b", &before_shutdown);
-        if (!before_shutdown)
-          maybe_inhibit_shutdown (dbus_proxy);
+        inhibit_shutdown (dbus_proxy);
+        GVariant *session_id = g_variant_get_child_value (parameters, 0);
+        emtr_event_recorder_record_start (emtr_event_recorder_get_default (),
+                                          EMTR_EVENT_USER_IS_LOGGED_IN, session_id,
+                                          NULL /* auxiliary_payload */);
+        g_variant_unref (session_id);
       }
 }
 
