@@ -2,7 +2,7 @@
 Description=EndlessOS Metrics Instrumentation
 Requires=dbus.service
 After=dbus.service
-Before=dbus-org.freedesktop.login1.service systemd-logind.service
+Before=dbus-org.freedesktop.login1.service systemd-logind.service systemd-user-sessions.service
 
 [Service]
 Type=simple
