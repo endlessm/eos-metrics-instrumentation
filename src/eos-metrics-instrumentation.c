@@ -144,7 +144,6 @@ record_stop_for_login (GQuark   session_id_quark,
                                      EMTR_EVENT_USER_IS_LOGGED_IN,
                                      session_id_variant,
                                      NULL /* auxiliary_payload */);
-    g_variant_unref (session_id_variant);
 }
 
 /*
