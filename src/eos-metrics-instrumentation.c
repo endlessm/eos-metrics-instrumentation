@@ -11,6 +11,15 @@
 
 #include <eosmetrics/eosmetrics.h>
 
+/**
+ * EMTR_EVENT_USER_IS_LOGGED_IN_V2:
+ *
+ * Started when a user logs in and stopped when that user logs out.
+ * Payload contains the user ID of the user that logged in.
+ * (Thus the payload is a GVariant containing a single unsigned 32-bit integer.)
+ */
+#define EMTR_EVENT_USER_IS_LOGGED_IN_V2 "e6b65598-78ee-4c7a-a166-b9abe92889ad"
+
 #define MIN_HUMAN_USER_ID 1000
 
 #define SHUTDOWN_INHIBITOR_UNSET -1
@@ -141,7 +150,7 @@ record_stop_for_login (GQuark   session_id_quark,
     const gchar *session_id = g_quark_to_string (session_id_quark);
     GVariant *session_id_variant = g_variant_new_string (session_id);
     emtr_event_recorder_record_stop (emtr_event_recorder_get_default (),
-                                     EMTR_EVENT_USER_IS_LOGGED_IN,
+                                     EMTR_EVENT_USER_IS_LOGGED_IN_V2,
                                      session_id_variant,
                                      NULL /* auxiliary_payload */);
 }
@@ -273,7 +282,7 @@ record_login (GDBusProxy *dbus_proxy,
       {
         GVariant *session_id = g_variant_get_child_value (parameters, 0);
         emtr_event_recorder_record_stop (emtr_event_recorder_get_default (),
-                                         EMTR_EVENT_USER_IS_LOGGED_IN, session_id,
+                                         EMTR_EVENT_USER_IS_LOGGED_IN_V2, session_id,
                                          NULL /* auxiliary_payload */);
         g_variant_unref (session_id);
       }
@@ -282,9 +291,10 @@ record_login (GDBusProxy *dbus_proxy,
       {
         inhibit_shutdown (dbus_proxy);
         GVariant *session_id = g_variant_get_child_value (parameters, 0);
+        GVariant *user_id = g_variant_new_uint32 (getuid ());
         emtr_event_recorder_record_start (emtr_event_recorder_get_default (),
-                                          EMTR_EVENT_USER_IS_LOGGED_IN, session_id,
-                                          NULL /* auxiliary_payload */);
+                                          EMTR_EVENT_USER_IS_LOGGED_IN_V2, session_id,
+                                          user_id /* auxiliary_payload */);
         g_variant_unref (session_id);
       }
 }
