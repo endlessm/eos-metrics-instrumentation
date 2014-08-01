@@ -12,6 +12,16 @@
 #include <eosmetrics/eosmetrics.h>
 
 /**
+ * EMTR_EVENT_STARTUP_FINISHED:
+ *
+ * Recorded when startup has finished as defined by the systemd manager DBus
+ * interface. The auxiliary payload contains the parameters sent by the DBus
+ * systemd manager interface as described at
+ * http://www.freedesktop.org/wiki/Software/systemd/dbus/.
+ */
+#define EMTR_EVENT_STARTUP_FINISHED "bf7e8aed-2932-455c-a28e-d407cfd5aaba"
+
+/**
  * EMTR_EVENT_USER_IS_LOGGED_IN_V2:
  *
  * Started when a user logs in and stopped when that user logs out.
@@ -39,6 +49,90 @@ G_LOCK_DEFINE_STATIC (humanity_by_session_id);
 static volatile gint shutdown_inhibitor = SHUTDOWN_INHIBITOR_UNSET;
 
 G_LOCK_DEFINE_STATIC (shutdown_inhibitor);
+
+/*
+ * Handle a signal from the systemd manager by recording the StartupFinished
+ * signal. Once the StartupFinished signal has been received, call the
+ * Unsubscribe method on the systemd manager interface to stop requesting that
+ * all signals be emitted.
+ */
+static void
+record_startup (GDBusProxy *dbus_proxy,
+                gchar      *sender_name,
+                gchar      *signal_name,
+                GVariant   *parameters,
+                gpointer    user_data)
+{
+    if (strcmp (signal_name, "StartupFinished") == 0)
+      {
+        emtr_event_recorder_record_event (emtr_event_recorder_get_default (),
+                                          EMTR_EVENT_STARTUP_FINISHED,
+                                          parameters);
+
+        GError *error = NULL;
+        GVariant *unsubscribe_result =
+          g_dbus_proxy_call_sync (dbus_proxy, "Unsubscribe",
+                                  NULL /* parameters */,
+                                  G_DBUS_CALL_FLAGS_NONE, -1 /* timeout */,
+                                  NULL /* GCancellable */, &error);
+        if (unsubscribe_result == NULL)
+          {
+            g_warning ("Error unsubscribing from systemd signals: %s.",
+                       error->message);
+            g_error_free (error);
+            return;
+          }
+
+        g_variant_unref (unsubscribe_result);
+     }
+}
+
+/*
+ * Register record_startup as a signal handler for the systemd manager. Call the
+ * Subscribe method on said interface to request that it emit all signals.
+ */
+static GDBusProxy *
+systemd_dbus_proxy_new (void)
+{
+    GError *error = NULL;
+    GDBusProxy *dbus_proxy =
+      g_dbus_proxy_new_for_bus_sync (G_BUS_TYPE_SYSTEM,
+                                     G_DBUS_PROXY_FLAGS_NONE,
+                                     NULL /* GDBusInterfaceInfo */,
+                                     "org.freedesktop.systemd1",
+                                     "/org/freedesktop/systemd1",
+                                     "org.freedesktop.systemd1.Manager",
+                                     NULL /* GCancellable */, &error);
+    if (dbus_proxy == NULL)
+      {
+        g_warning ("Error creating GDBusProxy: %s.", error->message);
+        g_error_free (error);
+        return NULL;
+      }
+
+    g_signal_connect (dbus_proxy, "g-signal", G_CALLBACK (record_startup),
+                      NULL /* data */);
+
+    GVariant *subscribe_result =
+      g_dbus_proxy_call_sync (dbus_proxy, "Subscribe", NULL /* parameters*/,
+                              G_DBUS_CALL_FLAGS_NONE, -1 /* timeout */,
+                              NULL /* GCancellable*/, &error);
+    if (subscribe_result == NULL)
+      {
+        g_warning ("Error subscribing to systemd signals: %s.", error->message);
+        g_error_free (error);
+
+        /*
+         * We still might receive systemd signals even though Subscribe failed.
+         * As long as at least one process successfully subscribes, the systemd
+         * manager will emit all signals.
+         */
+        return dbus_proxy;
+      }
+
+    g_variant_unref (subscribe_result);
+    return dbus_proxy;
+}
 
 /*
  * Return TRUE if the given parameters of a SessionNew or SessionRemoved signal
@@ -394,6 +488,7 @@ main(int                argc,
      const char * const argv[])
 {
     g_datalist_init (&humanity_by_session_id);
+    GDBusProxy *systemd_dbus_proxy = systemd_dbus_proxy_new ();
     GDBusProxy *login_dbus_proxy = login_dbus_proxy_new ();
     GDBusProxy *network_dbus_proxy = network_dbus_proxy_new ();
     GMainLoop *main_loop = g_main_loop_new (NULL, TRUE);
@@ -405,6 +500,7 @@ main(int                argc,
     g_main_loop_run (main_loop);
 
     g_main_loop_unref (main_loop);
+    g_clear_object (&systemd_dbus_proxy);
     g_clear_object (&login_dbus_proxy);
     g_clear_object (&network_dbus_proxy);
     G_LOCK (humanity_by_session_id);
