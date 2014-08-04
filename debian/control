@@ -6,6 +6,7 @@ Build-Depends: debhelper (>= 9),
 	autotools-dev,
 	eos-metrics-0-dev,
 	libglib2.0-dev,
+	libgnome-desktop-3-dev,
 	dh-autoreconf,
 	dh-systemd
 
