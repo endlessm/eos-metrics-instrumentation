@@ -432,17 +432,16 @@ record_network_change (GDBusProxy *dbus_proxy,
     if (strcmp ("StateChanged", signal_name) == 0)
       {
         guint32 new_network_state;
-        g_variant_get(parameters, "(u)", &new_network_state);
+        g_variant_get (parameters, "(u)", &new_network_state);
 
         G_LOCK (previous_network_state);
 
-        GVariant *status_change = g_variant_new("(uu)", previous_network_state,
-                                                new_network_state);
+        GVariant *status_change = g_variant_new ("(uu)", previous_network_state,
+                                                 new_network_state);
 
         emtr_event_recorder_record_event (emtr_event_recorder_get_default (),
                                           EMTR_EVENT_NETWORK_STATUS_CHANGED,
                                           status_change);
-        g_variant_unref (status_change);
 
         previous_network_state = new_network_state;
 
