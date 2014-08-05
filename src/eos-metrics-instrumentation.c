@@ -442,7 +442,6 @@ record_network_change (GDBusProxy *dbus_proxy,
         emtr_event_recorder_record_event (emtr_event_recorder_get_default (),
                                           EMTR_EVENT_NETWORK_STATUS_CHANGED,
                                           status_change);
-        g_variant_unref (status_change);
 
         previous_network_state = new_network_state;
 
