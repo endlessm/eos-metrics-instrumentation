@@ -470,9 +470,8 @@ network_dbus_proxy_new (void)
 }
 
 static gboolean
-quit_main_loop (gpointer user_data)
+quit_main_loop (GMainLoop *main_loop)
 {
-    GMainLoop *main_loop = (GMainLoop *) user_data;
     g_main_loop_quit (main_loop);
     return G_SOURCE_REMOVE;
 }
@@ -486,11 +485,11 @@ main(int                argc,
     GDBusProxy *login_dbus_proxy = login_dbus_proxy_new ();
     GDBusProxy *network_dbus_proxy = network_dbus_proxy_new ();
     GMainLoop *main_loop = g_main_loop_new (NULL, TRUE);
-    g_unix_signal_add (SIGHUP, quit_main_loop, main_loop);
-    g_unix_signal_add (SIGINT, quit_main_loop, main_loop);
-    g_unix_signal_add (SIGTERM, quit_main_loop, main_loop);
-    g_unix_signal_add (SIGUSR1, quit_main_loop, main_loop);
-    g_unix_signal_add (SIGUSR2, quit_main_loop, main_loop);
+    g_unix_signal_add (SIGHUP, (GSourceFunc) quit_main_loop, main_loop);
+    g_unix_signal_add (SIGINT, (GSourceFunc) quit_main_loop, main_loop);
+    g_unix_signal_add (SIGTERM, (GSourceFunc) quit_main_loop, main_loop);
+    g_unix_signal_add (SIGUSR1, (GSourceFunc) quit_main_loop, main_loop);
+    g_unix_signal_add (SIGUSR2, (GSourceFunc) quit_main_loop, main_loop);
     g_main_loop_run (main_loop);
 
     g_main_loop_unref (main_loop);
