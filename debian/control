@@ -4,7 +4,7 @@ Priority: standard
 Maintainer: Kurt von Laven <kurt@endlessm.com>
 Build-Depends: debhelper (>= 9),
 	autotools-dev,
-	eos-metrics-0-dev,
+	libeosmetrics-0-dev,
 	libglib2.0-dev,
 	dh-autoreconf,
 	dh-systemd
