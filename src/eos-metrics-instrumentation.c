@@ -24,7 +24,7 @@
  * Payload contains the user ID of the user that logged in.
  * (Thus the payload is a GVariant containing a single unsigned 32-bit integer.)
  */
-#define USER_IS_LOGGED_IN_V2 "e6b65598-78ee-4c7a-a166-b9abe92889ad"
+#define USER_IS_LOGGED_IN "add052be-7b2a-4959-81a5-a7f45062ee98"
 
 #define MIN_HUMAN_USER_ID 1000
 
@@ -130,11 +130,13 @@ systemd_dbus_proxy_new (void)
 }
 
 /*
- * Return TRUE if the given parameters of a SessionNew or SessionRemoved signal
- * correspond to a human session. Otherwise, return FALSE.
+ * Populate user_id with the user ID of the user associated with the SessionNew
+ * or SessionRemoved signal with the given parameters. user_id must already be
+ * allocated and non-NULL. Return TRUE if user_id was successfully populated and
+ * FALSE otherwise, in which case its contents should be ignored.
  */
 static gboolean
-is_human_session (GVariant *session_parameters)
+get_user_id (GVariant *session_parameters, guint32 *user_id)
 {
     GError *error = NULL;
     gchar *session_path;
@@ -177,9 +179,22 @@ is_human_session (GVariant *session_parameters)
     g_variant_unref (user_result);
     GVariant *user_tuple = g_variant_get_child_value (user_variant, 0);
     g_variant_unref (user_variant);
-    guint32 user_id;
-    g_variant_get_child (user_tuple, 0, "u", &user_id);
+    g_variant_get_child (user_tuple, 0, "u", user_id);
     g_variant_unref (user_tuple);
+    return TRUE;
+}
+
+/*
+ * Return TRUE if the given parameters of a SessionNew or SessionRemoved signal
+ * correspond to a human session. If the given parameters don't correspond to a
+ * human session, or this can't be determined, return FALSE.
+ */
+static gboolean
+is_human_session (GVariant *session_parameters)
+{
+    guint32 user_id;
+    if (!get_user_id (session_parameters, &user_id))
+      return FALSE;
     return user_id >= MIN_HUMAN_USER_ID;
 }
 
@@ -239,7 +254,7 @@ record_stop_for_login (GQuark   session_id_quark,
     const gchar *session_id = g_quark_to_string (session_id_quark);
     GVariant *session_id_variant = g_variant_new_string (session_id);
     emtr_event_recorder_record_stop (emtr_event_recorder_get_default (),
-                                     USER_IS_LOGGED_IN_V2,
+                                     USER_IS_LOGGED_IN,
                                      session_id_variant,
                                      NULL /* auxiliary_payload */);
 }
@@ -371,7 +386,7 @@ record_login (GDBusProxy *dbus_proxy,
       {
         GVariant *session_id = g_variant_get_child_value (parameters, 0);
         emtr_event_recorder_record_stop (emtr_event_recorder_get_default (),
-                                         USER_IS_LOGGED_IN_V2, session_id,
+                                         USER_IS_LOGGED_IN, session_id,
                                          NULL /* auxiliary_payload */);
         g_variant_unref (session_id);
       }
@@ -380,10 +395,15 @@ record_login (GDBusProxy *dbus_proxy,
       {
         inhibit_shutdown (dbus_proxy);
         GVariant *session_id = g_variant_get_child_value (parameters, 0);
-        GVariant *user_id = g_variant_new_uint32 (getuid ());
+
+        guint32 user_id;
+        gboolean user_id_is_valid = get_user_id (parameters, &user_id);
+        GVariant *user_id_variant = user_id_is_valid ?
+          g_variant_new_uint32 (user_id) : NULL;
+
         emtr_event_recorder_record_start (emtr_event_recorder_get_default (),
-                                          USER_IS_LOGGED_IN_V2, session_id,
-                                          user_id /* auxiliary_payload */);
+                                          USER_IS_LOGGED_IN, session_id,
+                                          user_id_variant);
         g_variant_unref (session_id);
       }
 }
