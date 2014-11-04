@@ -81,9 +81,7 @@ PKG_PROG_PKG_CONFIG
 AC_CACHE_SAVE
 
 # Check that the compiler supports C99, and enable it in our CFLAGS
-AS_COMPILER_FLAGS(C99_CFLAGS, "-std=c99")
-C99_CFLAGS=${C99_CFLAGS#*  }
-CFLAGS="$CFLAGS $C99_CFLAGS"
+AC_PROG_CC_C99
 
 # Configure options
 # -----------------
