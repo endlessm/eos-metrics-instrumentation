@@ -26,10 +26,18 @@ AM_DISTCHECK_CONFIGURE_FLAGS = \
 CLEANFILES =
 DISTCLEANFILES =
 
+# Binaries that should be produced but not installed.
+noinst_PROGRAMS =
+
+instrumentationcachedir=$(localstatedir)/cache/eos-metrics-instrumentation/
+
 # # # INSTRUMENTATION # # #
 
 # Instrumentation
 include $(top_srcdir)/src/Makefile.am.inc
 
-# Daemon Configuration
+# Configuration
 include $(top_srcdir)/data/Makefile.am.inc
+
+# Tests
+include $(top_srcdir)/tests/Makefile.am.inc

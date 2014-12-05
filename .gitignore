@@ -1,13 +1,24 @@
-eos-metrics-instrumentation
-*.o
+# Build products
+/eos-metrics-instrumentation
+/tests/test-persistent-tally
+/data/eos-metrics-instrumentation.conf
 
 # Backup files
 *~
+*.swp
+
+# Test products
+*.log
+*.trs
+
+# C extensions
+*.o
 
 # Autotools droppings
 .deps
 stamp*
 *.stamp
+.dirstamp
 *.tar.*
 *.pc
 Makefile
@@ -22,3 +33,4 @@ data/eos-metrics-instrumentation.service
 /depcomp
 /install-sh
 /missing
+/test-driver
