@@ -7,10 +7,26 @@ data/eos-metrics-instrumentation.service: data/eos-metrics-instrumentation.servi
 	$(edit) $< >$@.tmp && \
 	mv $@.tmp $@
 
+data/eos-metrics-instrumentation.conf: data/eos-metrics-instrumentation.conf.in
+	$(AM_V_GEN)$(MKDIR_P) data && \
+	rm -f $@ $@.tmp && \
+	$(edit) $< >$@.tmp && \
+	mv $@.tmp $@
+
 edit = sed \
 	-e 's|@libexecdir[@]|$(libexecdir)|g' \
+	-e 's|@instrumentationcachedir[@]|$(instrumentationcachedir)|g' \
 	$(NULL)
 
-EXTRA_DIST += data/eos-metrics-instrumentation.service.in
+tmpfilesddir = $(libdir)/tmpfiles.d/
+tmpfilesd_DATA = data/eos-metrics-instrumentation.conf
 
-CLEANFILES += data/eos-metrics-instrumentation.service
+EXTRA_DIST += \
+	data/eos-metrics-instrumentation.service.in \
+	data/eos-metrics-instrumentation.conf.in \
+	$(NULL)
+
+CLEANFILES += \
+	data/eos-metrics-instrumentation.service \
+	data/eos-metrics-instrumentation.conf \
+	$(NULL)

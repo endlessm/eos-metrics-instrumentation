@@ -11,6 +11,8 @@
 
 #include <eosmetrics/eosmetrics.h>
 
+#include "eins-persistent-tally.h"
+
 /*
  * Recorded when startup has finished as defined by the systemd manager DBus
  * interface. The auxiliary payload contains the parameters sent by the DBus
@@ -18,6 +20,17 @@
  * http://www.freedesktop.org/wiki/Software/systemd/dbus/.
  */
 #define STARTUP_FINISHED "bf7e8aed-2932-455c-a28e-d407cfd5aaba"
+
+/*
+ * Recorded when eos-metrics-instrumentation receives the SIGTERM signal, which
+ * should generally correspond to system shutdown. The auxiliary payload
+ * contains a running total of the system uptime in nanoseconds as a 64-bit
+ * signed integer. This running total accumulates across boots and excludes time
+ * the computer spends suspended.
+ */
+# define SHUTDOWN "ae391c82-1937-4ae5-8539-8d1aceed037d"
+
+#define UPTIME_KEY "uptime"
 
 /*
  * Started when a user logs in and stopped when that user logs out.
@@ -45,6 +58,12 @@ G_LOCK_DEFINE_STATIC (humanity_by_session_id);
 static volatile gint shutdown_inhibitor = SHUTDOWN_INHIBITOR_UNSET;
 
 G_LOCK_DEFINE_STATIC (shutdown_inhibitor);
+
+static gboolean start_time_set = FALSE;
+
+static gint64 start_time;
+
+static EinsPersistentTally *persistent_tally;
 
 /*
  * Handle a signal from the systemd manager by recording the StartupFinished
@@ -80,6 +99,57 @@ record_startup (GDBusProxy *dbus_proxy,
 
         g_variant_unref (unsubscribe_result);
      }
+}
+
+/* Set the global variable start_time to the current time. */
+static void
+set_start_time (void)
+{
+    start_time_set = emtr_util_get_current_time (CLOCK_MONOTONIC, &start_time);
+    persistent_tally = eins_persistent_tally_new (UPTIME_KEY);
+
+    if (!start_time_set)
+      return;
+
+    /* Cache contents of persistent tally. */
+    start_time_set = eins_persistent_tally_get_tally (persistent_tally, NULL);
+}
+
+/*
+ * Record a system shutdown event. Compute the length of time the system has
+ * been on but not suspended using the global variable start_time. Add that time
+ * to the running tally that spans across boots and report the tally as the
+ * auxiliary payload of the system shutdown event.
+ */
+static void
+record_shutdown (void)
+{
+    gint64 shutdown_time;
+    gboolean got_shutdown_time =
+      emtr_util_get_current_time (CLOCK_MONOTONIC, &shutdown_time);
+
+    if (!got_shutdown_time || !start_time_set)
+      return;
+
+    gint64 curr_boot_uptime = shutdown_time - start_time;
+    gboolean add_succeeded =
+      eins_persistent_tally_add_to_tally (persistent_tally, curr_boot_uptime);
+
+    if (!add_succeeded)
+      return;
+
+    gint64 uptime_tally;
+    gboolean get_succeeded =
+      eins_persistent_tally_get_tally (persistent_tally, &uptime_tally);
+
+    if (!get_succeeded)
+      return;
+
+    GVariant *uptime_tally_variant = g_variant_new_int64 (uptime_tally);
+    emtr_event_recorder_record_event (emtr_event_recorder_get_default (),
+                                      SHUTDOWN, uptime_tally_variant);
+
+    g_object_unref (persistent_tally);
 }
 
 /*
@@ -500,6 +570,7 @@ int
 main(int                argc,
      const char * const argv[])
 {
+    set_start_time ();
     g_datalist_init (&humanity_by_session_id);
     GDBusProxy *systemd_dbus_proxy = systemd_dbus_proxy_new ();
     GDBusProxy *login_dbus_proxy = login_dbus_proxy_new ();
@@ -512,6 +583,7 @@ main(int                argc,
     g_unix_signal_add (SIGUSR2, (GSourceFunc) quit_main_loop, main_loop);
     g_main_loop_run (main_loop);
 
+    record_shutdown ();
     g_main_loop_unref (main_loop);
     g_clear_object (&systemd_dbus_proxy);
     g_clear_object (&login_dbus_proxy);
