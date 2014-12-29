@@ -30,6 +30,17 @@
  */
 # define SHUTDOWN "ae391c82-1937-4ae5-8539-8d1aceed037d"
 
+/*
+ * Recorded when the system successfully pings a geolocation server to
+ * retrieve the location of the system. The auxiliary payload
+ * contains a string of the name of the nearest city.
+ */
+#define LOCATION "701c3180-8fa1-11e4-b4a9-0800200c9a66"
+
+#define TIMEOUT_MS 10000
+
+#define GEOLOCATION_URI "http://www.telize.com/geoip";
+
 #define UPTIME_KEY "uptime"
 
 /*
@@ -566,6 +577,70 @@ quit_main_loop (GMainLoop *main_loop)
     return G_SOURCE_REMOVE;
 }
 
+/*
+ * Returns a string of the user's city. This string is parsed from
+ * the contents of the received JSON response. The string manipulation
+ * in this function is specific to the geolocation service and should
+ * change if the service does.
+ */
+static gchar *
+get_city_from_contents(gchar *contents)
+{
+    gchar *start = (gchar *)(g_strrstr(contents, "city") + 7);
+    gchar *end = (gchar *)(g_strrstr(contents, "timezone") - 3);
+    return g_strndup(start, end - start);
+}
+
+
+static void
+geo_cb(GFile *gfile,
+       GAsyncResult *res,
+       gpointer user_data)
+{
+    gchar *contents;
+    gsize length;
+    GError *error = NULL;
+
+    g_file_load_contents_finish(gfile, res, &contents, &length, NULL, &error);
+
+    if (error != NULL) {
+        g_warning ("Error unsubscribing from systemd signals: %s.",
+                   error->message);
+        g_error_free (error);
+        return;
+    }
+
+    gchar *city = get_city_from_contents(contents);
+    GVariant *location_variant = g_variant_new_string(city);
+
+    emtr_event_recorder_record_event (emtr_event_recorder_get_default (),
+                                      LOCATION,
+                                      location_variant);
+    g_free(city);
+    g_variant_unref(location_variant);
+}
+
+static gboolean
+check_geo_request(GCancellable *geo_cancellable)
+{
+    if (!g_cancellable_is_cancelled(geo_cancellable)) {
+        g_cancellable_cancel(geo_cancellable);
+    }
+
+    return G_SOURCE_REMOVE;
+}
+
+static void
+record_location(GMainLoop *loop)
+{
+    GCancellable *geo_cancellable = g_cancellable_new();
+
+    g_timeout_add(TIMEOUT_MS, (GSourceFunc)check_geo_request, geo_cancellable);
+
+    GFile *gfile = g_file_new_for_uri(GEOLOCATION_URI);
+    g_file_load_contents_async(gfile, geo_cancellable, (GAsyncReadyCallback)geo_cb, NULL);
+}
+
 int
 main(int                argc,
      const char * const argv[])
@@ -576,6 +651,7 @@ main(int                argc,
     GDBusProxy *login_dbus_proxy = login_dbus_proxy_new ();
     GDBusProxy *network_dbus_proxy = network_dbus_proxy_new ();
     GMainLoop *main_loop = g_main_loop_new (NULL, TRUE);
+    record_location (main_loop);
     g_unix_signal_add (SIGHUP, (GSourceFunc) quit_main_loop, main_loop);
     g_unix_signal_add (SIGINT, (GSourceFunc) quit_main_loop, main_loop);
     g_unix_signal_add (SIGTERM, (GSourceFunc) quit_main_loop, main_loop);
