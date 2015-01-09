@@ -31,6 +31,15 @@ noinst_PROGRAMS =
 
 instrumentationcachedir=$(localstatedir)/cache/eos-metrics-instrumentation/
 
+# # # CODE COVERAGE # # #
+
+EOS_COVERAGE_BLACKLIST_PATTERNS = "*/tests/*"
+
+@EOS_COVERAGE_RULES@
+
+AM_CFLAGS += @EOS_C_COVERAGE_CFLAGS@
+AM_LDFLAGS = @EOS_C_COVERAGE_LDFLAGS@
+
 # # # INSTRUMENTATION # # #
 
 # Instrumentation
