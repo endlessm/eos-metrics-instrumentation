@@ -138,6 +138,10 @@ PKG_CHECK_MODULES([EOS_INSTRUMENTATION], [
 	$GIO_REQUIREMENT
 ])
 
+# Code coverage
+# -------------
+EOS_COVERAGE_REPORT([c])
+
 AC_CACHE_SAVE
 
 # Output

@@ -34,3 +34,8 @@ data/eos-metrics-instrumentation.service
 /install-sh
 /missing
 /test-driver
+
+# Unit test / coverage reports
+*.gcda
+*.gcno
+/_coverage
