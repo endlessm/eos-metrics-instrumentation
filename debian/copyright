@@ -1,6 +1,5 @@
 Format: http://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
 Upstream-Name: eos-metrics-instrumentation
 Upstream-Contact: Kurt von Laven <kurt@endlessm.com>
-Disclaimer: Not part of the Debian distribution. (Proprietary software.)
-Copyright: Copyright 2014 Endless Mobile, Inc. All rights reserved.
-License: Proprietary
+Copyright: Copyright 2014, 2015 Endless Mobile, Inc. All rights reserved.
+License: GPL-2+
