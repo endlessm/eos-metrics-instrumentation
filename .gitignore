@@ -2,6 +2,7 @@
 /eos-metrics-instrumentation
 /tests/test-persistent-tally
 /data/eos-metrics-instrumentation.conf
+/geoclue.[ch]
 
 # Backup files
 *~

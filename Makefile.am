@@ -45,6 +45,9 @@ DISTCLEANFILES =
 # Binaries that should be produced but not installed.
 noinst_PROGRAMS =
 
+# Generated sources
+BUILT_SOURCES =
+
 instrumentationcachedir=$(localstatedir)/cache/eos-metrics-instrumentation/
 
 # # # CODE COVERAGE # # #

@@ -18,10 +18,20 @@
 
 libexec_PROGRAMS = eos-metrics-instrumentation
 
+geoclue.c: geoclue.h
+geoclue.h: $(GEOCLUE_DBUS_INTERFACE_XML)
+	$(AM_V_GEN)$(GDBUS_CODEGEN) --interface-prefix org.freedesktop.GeoClue2 \
+		--generate-c-code geoclue --c-namespace Geoclue $<
+BUILT_SOURCES += geoclue.c geoclue.h
+
 eos_metrics_instrumentation_SOURCES = \
 	src/eos-metrics-instrumentation.c \
+	src/eins-location.h \
+	src/eins-location.c \
 	src/eins-persistent-tally.h \
 	src/eins-persistent-tally.c \
+	geoclue.h \
+	geoclue.c \
 	$(NULL)
 
 # Pre-processor flags

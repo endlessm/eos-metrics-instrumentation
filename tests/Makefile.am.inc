@@ -22,7 +22,10 @@ noinst_PROGRAMS += \
 
 TESTS = \
 	tests/test-persistent-tally \
+	tests/test-location.py \
 	$(NULL)
+TEST_EXTENSIONS = .py
+PY_LOG_COMPILER = python
 
 TEST_FLAGS = \
 	@EOS_INSTRUMENTATION_CFLAGS@ \
@@ -40,3 +43,5 @@ tests_test_persistent_tally_SOURCES = \
 tests_test_persistent_tally_CPPFLAGS = $(TEST_FLAGS)
 
 tests_test_persistent_tally_LDADD = $(TEST_LIBS)
+
+EXTRA_DIST += tests/test-location.py
