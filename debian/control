@@ -6,6 +6,7 @@ Build-Depends: debhelper (>= 9),
 	autotools-dev,
 	eos-metrics-0-dev,
 	eos-sdk-0-dev (>= 0.0.0),
+	geoclue-2.0,
 	libglib2.0-dev,
 	dh-autoreconf,
 	dh-systemd
@@ -14,6 +15,7 @@ Package: eos-metrics-instrumentation
 Section: misc
 Architecture: any
 Depends: ${shlibs:Depends}, ${misc:Depends},
+	geoclue-2.0,
 	systemd (>= 200)
 Description: Metrics instrumentation for EndlessOS
  This package contains system and session daemons
