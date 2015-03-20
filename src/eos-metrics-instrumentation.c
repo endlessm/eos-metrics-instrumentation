@@ -123,7 +123,13 @@ static void
 set_start_time (void)
 {
     start_time_set = emtr_util_get_current_time (CLOCK_MONOTONIC, &start_time);
-    persistent_tally = eins_persistent_tally_new (UPTIME_KEY);
+
+    const gchar *tally_file_override = g_getenv("EOS_INSTRUMENTATION_CACHE");
+    if (tally_file_override)
+      persistent_tally = eins_persistent_tally_new_full (tally_file_override,
+                                                         UPTIME_KEY);
+    else
+      persistent_tally = eins_persistent_tally_new (UPTIME_KEY);
 
     if (!start_time_set)
       return;
