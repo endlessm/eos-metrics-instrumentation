@@ -149,9 +149,9 @@ AC_SUBST([systemdsystemunitdir])
 # Required libraries
 # ------------------
 PKG_CHECK_MODULES([EOS_INSTRUMENTATION], [
-	$EOS_METRICS_REQUIREMENT
-	$GLIB_REQUIREMENT
-	$GIO_REQUIREMENT
+    $EOS_METRICS_REQUIREMENT
+    $GLIB_REQUIREMENT
+    $GIO_REQUIREMENT
 ])
 
 # Code coverage
