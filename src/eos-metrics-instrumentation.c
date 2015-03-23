@@ -139,6 +139,33 @@ set_start_time (void)
     start_time_set = eins_persistent_tally_get_tally (persistent_tally, NULL);
 }
 
+static void
+flush_system_dbus_connection (void)
+{
+    GError *error = NULL;
+    GDBusConnection *dbus_connection =
+      g_bus_get_sync (G_BUS_TYPE_SYSTEM, NULL /* GCancellable */, &error);
+
+    if (dbus_connection == NULL)
+      {
+        g_warning ("Couldn't get system DBus connection: %s.", error->message);
+        g_error_free (error);
+        return;
+      }
+
+    gboolean flush_succeeded =
+      g_dbus_connection_flush_sync (dbus_connection, NULL /* GCancellable */,
+                                    &error);
+    g_clear_object (&dbus_connection);
+
+    if (!flush_succeeded)
+      {
+        g_warning ("Couldn't flush system DBus connection: %s.",
+                   error->message);
+        g_error_free (error);
+      }
+}
+
 /*
  * Record a system shutdown event. Compute the length of time the system has
  * been on but not suspended using the global variable start_time. Add that time
@@ -174,6 +201,8 @@ record_shutdown (void)
                                       SHUTDOWN, uptime_tally_variant);
 
     g_object_unref (persistent_tally);
+
+    flush_system_dbus_connection ();
 }
 
 /*
@@ -191,7 +220,8 @@ systemd_dbus_proxy_new (void)
                                      "org.freedesktop.systemd1",
                                      "/org/freedesktop/systemd1",
                                      "org.freedesktop.systemd1.Manager",
-                                     NULL /* GCancellable */, &error);
+                                     NULL /* GCancellable */,
+                                     &error);
     if (dbus_proxy == NULL)
       {
         g_warning ("Error creating GDBusProxy: %s.", error->message);
@@ -242,7 +272,8 @@ get_user_id (GVariant *session_parameters, guint32 *user_id)
                                      "org.freedesktop.login1",
                                      session_path,
                                      "org.freedesktop.DBus.Properties",
-                                     NULL /* GCancellable */, &error);
+                                     NULL /* GCancellable */,
+                                     &error);
     g_free (session_path);
 
     if (dbus_proxy == NULL)
@@ -254,7 +285,8 @@ get_user_id (GVariant *session_parameters, guint32 *user_id)
 
     GVariant *get_user_args =
       g_variant_new_parsed ("('org.freedesktop.login1.Session', 'User')");
-    GVariant *user_result = g_dbus_proxy_call_sync (dbus_proxy, "Get",
+    GVariant *user_result = g_dbus_proxy_call_sync (dbus_proxy,
+                                                    "Get",
                                                     get_user_args,
                                                     G_DBUS_CALL_FLAGS_NONE,
                                                     -1 /* timeout */,
@@ -366,7 +398,8 @@ inhibit_shutdown (GDBusProxy *dbus_proxy)
         GError *error = NULL;
         GUnixFDList *fd_list = NULL;
         GVariant *inhibitor_tuple =
-          g_dbus_proxy_call_with_unix_fd_list_sync (dbus_proxy, "Inhibit",
+          g_dbus_proxy_call_with_unix_fd_list_sync (dbus_proxy,
+                                                    "Inhibit",
                                                     inhibit_args,
                                                     G_DBUS_CALL_FLAGS_NONE,
                                                     -1 /* timeout */,
@@ -480,7 +513,8 @@ record_login (GDBusProxy *dbus_proxy,
       {
         GVariant *session_id = g_variant_get_child_value (parameters, 0);
         emtr_event_recorder_record_stop (emtr_event_recorder_get_default (),
-                                         USER_IS_LOGGED_IN, session_id,
+                                         USER_IS_LOGGED_IN,
+                                         session_id,
                                          NULL /* auxiliary_payload */);
         g_variant_unref (session_id);
       }
@@ -496,7 +530,8 @@ record_login (GDBusProxy *dbus_proxy,
           g_variant_new_uint32 (user_id) : NULL;
 
         emtr_event_recorder_record_start (emtr_event_recorder_get_default (),
-                                          USER_IS_LOGGED_IN, session_id,
+                                          USER_IS_LOGGED_IN,
+                                          session_id,
                                           user_id_variant);
         g_variant_unref (session_id);
       }
@@ -513,7 +548,8 @@ login_dbus_proxy_new (void)
                                      "org.freedesktop.login1",
                                      "/org/freedesktop/login1",
                                      "org.freedesktop.login1.Manager",
-                                     NULL /* GCancellable */, &error);
+                                     NULL /* GCancellable */,
+                                     &error);
     if (dbus_proxy == NULL)
       {
         g_warning ("Error creating GDBusProxy: %s\n", error->message);
@@ -569,7 +605,8 @@ network_dbus_proxy_new (void)
                                      "org.freedesktop.NetworkManager",
                                      "/org/freedesktop/NetworkManager",
                                      "org.freedesktop.NetworkManager",
-                                     NULL /* GCancellable */, &error);
+                                     NULL /* GCancellable */,
+                                     &error);
     if (dbus_proxy == NULL)
       {
         g_warning ("Error creating GDBusProxy: %s\n", error->message);
