@@ -81,6 +81,7 @@ AC_DEFINE([EOS_INSTRUMENTATION_VERSION], [_EOS_INSTRUMENTATION_VERSION_MACRO], [
 # Required versions of libraries
 # Update these whenever you use a function that requires a certain API version
 EOS_METRICS_REQUIREMENT="eosmetrics-0"
+GEOCLUE_REQUIREMENT="geoclue-2.0"
 GLIB_REQUIREMENT="glib-2.0"
 GIO_REQUIREMENT="gio-2.0"
 
@@ -94,6 +95,11 @@ AC_PROG_CC
 AM_PROG_CC_C_O
 # Intializes PKG_CONFIG variable so that systemdsystemunitdir can be found.
 PKG_PROG_PKG_CONFIG
+# Other tools
+AC_PATH_PROG([GDBUS_CODEGEN], [gdbus-codegen], [notfound])
+AS_IF([test "x$GDBUS_CODEGEN" = "xnotfound"],
+    [AC_MSG_ERROR([Could not find gdbus-codegen])])
+AC_ARG_VAR([GDBUS_CODEGEN], [Path to gdbus-codegen])
 
 AC_CACHE_SAVE
 
@@ -149,10 +155,18 @@ AC_SUBST([systemdsystemunitdir])
 # Required libraries
 # ------------------
 PKG_CHECK_MODULES([EOS_INSTRUMENTATION], [
-	$EOS_METRICS_REQUIREMENT
-	$GLIB_REQUIREMENT
-	$GIO_REQUIREMENT
+    $EOS_METRICS_REQUIREMENT
+    $GEOCLUE_REQUIREMENT
+    $GLIB_REQUIREMENT
+    $GIO_REQUIREMENT
 ])
+
+AC_MSG_CHECKING([for Geoclue2 DBus interface file])
+GEOCLUE_DBUS_INTERFACE_XML=`pkg-config --variable=dbus_interface geoclue-2.0`
+AS_IF([test "x$GEOCLUE_DBUS_INTERFACE_XML" = "x"],
+    [AC_MSG_ERROR([Cannot find dbus_interface variable in geoclue-2.0.pc])])
+AC_MSG_RESULT([$GEOCLUE_DBUS_INTERFACE_XML])
+AC_SUBST(GEOCLUE_DBUS_INTERFACE_XML)
 
 # Code coverage
 # -------------

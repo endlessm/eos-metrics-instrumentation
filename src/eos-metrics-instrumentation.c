@@ -28,6 +28,7 @@
 
 #include <eosmetrics/eosmetrics.h>
 
+#include "eins-location.h"
 #include "eins-persistent-tally.h"
 
 /*
@@ -123,7 +124,13 @@ static void
 set_start_time (void)
 {
     start_time_set = emtr_util_get_current_time (CLOCK_MONOTONIC, &start_time);
-    persistent_tally = eins_persistent_tally_new (UPTIME_KEY);
+
+    const gchar *tally_file_override = g_getenv("EOS_INSTRUMENTATION_CACHE");
+    if (tally_file_override)
+      persistent_tally = eins_persistent_tally_new_full (tally_file_override,
+                                                         UPTIME_KEY);
+    else
+      persistent_tally = eins_persistent_tally_new (UPTIME_KEY);
 
     if (!start_time_set)
       return;
@@ -593,6 +600,7 @@ main(int                argc,
     GDBusProxy *login_dbus_proxy = login_dbus_proxy_new ();
     GDBusProxy *network_dbus_proxy = network_dbus_proxy_new ();
     GMainLoop *main_loop = g_main_loop_new (NULL, TRUE);
+    g_idle_add ((GSourceFunc) record_location_metric, NULL);
     g_unix_signal_add (SIGHUP, (GSourceFunc) quit_main_loop, main_loop);
     g_unix_signal_add (SIGINT, (GSourceFunc) quit_main_loop, main_loop);
     g_unix_signal_add (SIGTERM, (GSourceFunc) quit_main_loop, main_loop);
