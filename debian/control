@@ -10,7 +10,8 @@ Build-Depends: debhelper (>= 9),
 	libglib2.0-dev,
 	dh-autoreconf,
 	dh-systemd,
-	python-dbus
+	python-dbus,
+	python-dbusmock
 
 Package: eos-metrics-instrumentation
 Section: misc
