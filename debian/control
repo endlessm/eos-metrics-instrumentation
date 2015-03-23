@@ -9,7 +9,8 @@ Build-Depends: debhelper (>= 9),
 	geoclue-2.0,
 	libglib2.0-dev,
 	dh-autoreconf,
-	dh-systemd
+	dh-systemd,
+	python-dbus
 
 Package: eos-metrics-instrumentation
 Section: misc
