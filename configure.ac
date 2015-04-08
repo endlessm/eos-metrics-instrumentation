@@ -80,7 +80,7 @@ AC_DEFINE([EOS_INSTRUMENTATION_VERSION], [_EOS_INSTRUMENTATION_VERSION_MACRO], [
 
 # Required versions of libraries
 # Update these whenever you use a function that requires a certain API version
-EOS_METRICS_REQUIREMENT="eosmetrics-0"
+EOS_METRICS_REQUIREMENT="eosmetrics-0 >= 0.3.0"
 GEOCLUE_REQUIREMENT="geoclue-2.0"
 GLIB_REQUIREMENT="glib-2.0"
 GIO_REQUIREMENT="gio-2.0"

@@ -150,33 +150,6 @@ set_start_time (void)
     start_time_set = eins_persistent_tally_get_tally (persistent_tally, NULL);
 }
 
-static void
-flush_system_dbus_connection (void)
-{
-    GError *error = NULL;
-    GDBusConnection *dbus_connection =
-      g_bus_get_sync (G_BUS_TYPE_SYSTEM, NULL /* GCancellable */, &error);
-
-    if (dbus_connection == NULL)
-      {
-        g_warning ("Couldn't get system DBus connection: %s.", error->message);
-        g_error_free (error);
-        return;
-      }
-
-    gboolean flush_succeeded =
-      g_dbus_connection_flush_sync (dbus_connection, NULL /* GCancellable */,
-                                    &error);
-    g_clear_object (&dbus_connection);
-
-    if (!flush_succeeded)
-      {
-        g_warning ("Couldn't flush system DBus connection: %s.",
-                   error->message);
-        g_error_free (error);
-      }
-}
-
 /*
  * Record a system shutdown event. Compute the length of time the system has
  * been on but not suspended using the global variable start_time. Add that time
@@ -208,12 +181,10 @@ record_shutdown (void)
       return;
 
     GVariant *uptime_tally_variant = g_variant_new_int64 (uptime_tally);
-    emtr_event_recorder_record_event (emtr_event_recorder_get_default (),
-                                      SHUTDOWN, uptime_tally_variant);
+    emtr_event_recorder_record_event_sync (emtr_event_recorder_get_default (),
+                                           SHUTDOWN, uptime_tally_variant);
 
     g_object_unref (persistent_tally);
-
-    flush_system_dbus_connection ();
 }
 
 /*
