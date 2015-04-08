@@ -21,8 +21,6 @@
 #include <glib.h>
 #include <glib-object.h>
 #include <glib-unix.h>
-#include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 
 #include <eosmetrics/eosmetrics.h>
