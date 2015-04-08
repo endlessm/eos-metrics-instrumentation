@@ -487,8 +487,8 @@ network_dbus_proxy_new (void)
       }
     else
       {
-        g_signal_connect (dbus_proxy, "g-signal", G_CALLBACK (record_network_change),
-                          NULL /* data */);
+        g_signal_connect (dbus_proxy, "g-signal",
+                          G_CALLBACK (record_network_change), NULL /* data */);
       }
     return dbus_proxy;
 }
