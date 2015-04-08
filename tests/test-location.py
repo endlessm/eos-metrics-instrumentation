@@ -143,13 +143,15 @@ class TestLocationIntegration(dbusmock.DBusTestCase):
         self.metrics_popen.wait()
 
     def quit_on(self, method_name):
-        """Quit the main loop when the DBus method @method_name is called. Use
-        like this:
+        """Quit the main loop when the DBus method @method_name is called.
+        Timeout after waiting for 20 seconds. Use like this:
             self.quit_on('MyMethod')
             self.mainloop.run()
             # now MyMethod has been called
         """
         self._quit_on_method = method_name
+        GLib.timeout_add_seconds(20, self.fail, 'Test timed out after ' +
+                                 'waiting 20 seconds for D-Bus method call.')
 
     def handle_dbus_event_received(self, name, *args):
         if name == self._quit_on_method:
