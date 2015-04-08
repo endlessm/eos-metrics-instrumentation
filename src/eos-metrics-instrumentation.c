@@ -506,23 +506,29 @@ main(int                argc,
 {
     set_start_time ();
     g_datalist_init (&humanity_by_session_id);
+
     GDBusProxy *systemd_dbus_proxy = systemd_dbus_proxy_new ();
     GDBusProxy *login_dbus_proxy = login_dbus_proxy_new ();
     GDBusProxy *network_dbus_proxy = network_dbus_proxy_new ();
+
     GMainLoop *main_loop = g_main_loop_new (NULL, TRUE);
     g_idle_add ((GSourceFunc) record_location_metric, NULL);
+
     g_unix_signal_add (SIGHUP, (GSourceFunc) quit_main_loop, main_loop);
     g_unix_signal_add (SIGINT, (GSourceFunc) quit_main_loop, main_loop);
     g_unix_signal_add (SIGTERM, (GSourceFunc) quit_main_loop, main_loop);
     g_unix_signal_add (SIGUSR1, (GSourceFunc) quit_main_loop, main_loop);
     g_unix_signal_add (SIGUSR2, (GSourceFunc) quit_main_loop, main_loop);
+
     g_main_loop_run (main_loop);
 
     record_logout_for_all_remaining_sessions ();
     record_shutdown ();
+
     g_main_loop_unref (main_loop);
     g_clear_object (&systemd_dbus_proxy);
     g_clear_object (&login_dbus_proxy);
     g_clear_object (&network_dbus_proxy);
+
     return EXIT_SUCCESS;
 }
