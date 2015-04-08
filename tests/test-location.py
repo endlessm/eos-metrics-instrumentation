@@ -121,7 +121,8 @@ class TestLocationIntegration(dbusmock.DBusTestCase):
 
         # Mechanism for blocking on a particular call
         self.dbus_con.add_signal_receiver(self.handle_dbus_event_received,
-                                          signal_name='MethodCalled')
+                                          signal_name='MethodCalled',
+                                          dbus_interface=dbusmock.MOCK_IFACE)
         self.mainloop = GLib.MainLoop()
         self._quit_on_method = ''
 
