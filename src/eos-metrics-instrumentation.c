@@ -67,6 +67,17 @@
 #define MODE "delay"
 #define INHIBIT_ARGS "('" WHAT "', '" WHO "', '" WHY "', '" MODE "')"
 
+/*
+ * Recorded when the network changes from one of the states described at
+ * https://developer.gnome.org/NetworkManager/unstable/spec.html#type-NM_STATE
+ * to another. The auxiliary payload is a 2-tuple of the form
+ * (previous_network_state, new_network_state). Since events are delivered on a
+ * best-effort basis, there is no guarantee that the new network state of the
+ * previous successfully recorded network status change event matches the
+ * previous network state of the current network status change event.
+ */
+#define NETWORK_STATUS_CHANGED_EVENT "5fae6179-e108-4962-83be-c909259c0584"
+
 // Protected by humanity_by_session_id lock.
 static GData *humanity_by_session_id;
 
@@ -585,7 +596,7 @@ record_network_change (GDBusProxy *dbus_proxy,
                                                  new_network_state);
 
         emtr_event_recorder_record_event (emtr_event_recorder_get_default (),
-                                          EMTR_EVENT_NETWORK_STATUS_CHANGED,
+                                          NETWORK_STATUS_CHANGED_EVENT,
                                           status_change);
 
         previous_network_state = new_network_state;
