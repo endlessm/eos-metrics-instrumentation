@@ -19,11 +19,8 @@
 
 #include <gio/gio.h>
 #include <glib.h>
+#include <glib-object.h>
 #include <glib-unix.h>
-#include <glib/gstdio.h>
-#include <gio/gunixfdlist.h>
-#include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 
 #include <eosmetrics/eosmetrics.h>
@@ -59,23 +56,21 @@
 
 #define MIN_HUMAN_USER_ID 1000
 
-#define SHUTDOWN_INHIBITOR_UNSET -1
-
-#define WHAT "shutdown"
-#define WHO "EndlessOS Metrics Instrumentation Daemon"
-#define WHY "Recording Logout/Shutdown Metrics"
-#define MODE "delay"
-#define INHIBIT_ARGS "('" WHAT "', '" WHO "', '" WHY "', '" MODE "')"
+/*
+ * Recorded when the network changes from one of the states described at
+ * https://developer.gnome.org/NetworkManager/unstable/spec.html#type-NM_STATE
+ * to another. The auxiliary payload is a 2-tuple of the form
+ * (previous_network_state, new_network_state). Since events are delivered on a
+ * best-effort basis, there is no guarantee that the new network state of the
+ * previous successfully recorded network status change event matches the
+ * previous network state of the current network status change event.
+ */
+#define NETWORK_STATUS_CHANGED_EVENT "5fae6179-e108-4962-83be-c909259c0584"
 
 // Protected by humanity_by_session_id lock.
 static GData *humanity_by_session_id;
 
 G_LOCK_DEFINE_STATIC (humanity_by_session_id);
-
-// Protected by shutdown_inhibitor lock.
-static volatile gint shutdown_inhibitor = SHUTDOWN_INHIBITOR_UNSET;
-
-G_LOCK_DEFINE_STATIC (shutdown_inhibitor);
 
 static gboolean start_time_set = FALSE;
 
@@ -139,33 +134,6 @@ set_start_time (void)
     start_time_set = eins_persistent_tally_get_tally (persistent_tally, NULL);
 }
 
-static void
-flush_system_dbus_connection (void)
-{
-    GError *error = NULL;
-    GDBusConnection *dbus_connection =
-      g_bus_get_sync (G_BUS_TYPE_SYSTEM, NULL /* GCancellable */, &error);
-
-    if (dbus_connection == NULL)
-      {
-        g_warning ("Couldn't get system DBus connection: %s.", error->message);
-        g_error_free (error);
-        return;
-      }
-
-    gboolean flush_succeeded =
-      g_dbus_connection_flush_sync (dbus_connection, NULL /* GCancellable */,
-                                    &error);
-    g_clear_object (&dbus_connection);
-
-    if (!flush_succeeded)
-      {
-        g_warning ("Couldn't flush system DBus connection: %s.",
-                   error->message);
-        g_error_free (error);
-      }
-}
-
 /*
  * Record a system shutdown event. Compute the length of time the system has
  * been on but not suspended using the global variable start_time. Add that time
@@ -197,12 +165,10 @@ record_shutdown (void)
       return;
 
     GVariant *uptime_tally_variant = g_variant_new_int64 (uptime_tally);
-    emtr_event_recorder_record_event (emtr_event_recorder_get_default (),
-                                      SHUTDOWN, uptime_tally_variant);
+    emtr_event_recorder_record_event_sync (emtr_event_recorder_get_default (),
+                                           SHUTDOWN, uptime_tally_variant);
 
     g_object_unref (persistent_tally);
-
-    flush_system_dbus_connection ();
 }
 
 /*
@@ -369,8 +335,8 @@ remove_session_from_set (GVariant *session_parameters)
 }
 
 /*
- * Intended for use as a GDataForeachFunc callback. Records a logout for the
- * given session ID.
+ * Intended for use as a GDataForeachFunc callback. Synchronously records a
+ * logout for the given session ID.
  */
 static void
 record_stop_for_login (GQuark   session_id_quark,
@@ -379,94 +345,10 @@ record_stop_for_login (GQuark   session_id_quark,
 {
     const gchar *session_id = g_quark_to_string (session_id_quark);
     GVariant *session_id_variant = g_variant_new_string (session_id);
-    emtr_event_recorder_record_stop (emtr_event_recorder_get_default (),
-                                     USER_IS_LOGGED_IN,
-                                     session_id_variant,
-                                     NULL /* auxiliary_payload */);
-}
-
-/*
- * Inhibit shutdown if we don't already hold a valid shutdown inhibitor.
- */
-static void
-inhibit_shutdown (GDBusProxy *dbus_proxy)
-{
-    G_LOCK (shutdown_inhibitor);
-    if (shutdown_inhibitor == SHUTDOWN_INHIBITOR_UNSET)
-      {
-        GVariant *inhibit_args = g_variant_new_parsed (INHIBIT_ARGS);
-        GError *error = NULL;
-        GUnixFDList *fd_list = NULL;
-        GVariant *inhibitor_tuple =
-          g_dbus_proxy_call_with_unix_fd_list_sync (dbus_proxy,
-                                                    "Inhibit",
-                                                    inhibit_args,
-                                                    G_DBUS_CALL_FLAGS_NONE,
-                                                    -1 /* timeout */,
-                                                    NULL /* input fd_list */,
-                                                    &fd_list /* out fd_list */,
-                                                    NULL /* GCancellable */,
-                                                    &error);
-        if (inhibitor_tuple == NULL)
-          {
-            if (fd_list != NULL)
-              g_object_unref (fd_list);
-            g_warning ("Error inhibiting shutdown: %s\n", error->message);
-            g_error_free (error);
-            goto finally;
-          }
-
-        g_variant_unref (inhibitor_tuple);
-
-        gint fd_list_length;
-        gint *fds = g_unix_fd_list_steal_fds (fd_list, &fd_list_length);
-        g_object_unref (fd_list);
-        if (fd_list_length != 1)
-          {
-            g_warning ("Error inhibiting shutdown. Login manager returned %d "
-                       "file descriptors, but we expected 1 file descriptor.",
-                       fd_list_length);
-            g_free (fds);
-            goto finally;
-          }
-        shutdown_inhibitor = fds[0];
-        g_free (fds);
-      }
-
-finally:
-    G_UNLOCK (shutdown_inhibitor);
-}
-
-/*
- * Stop inhibiting shutdown unless we don't hold a shutdown inhibitor in the
- * first place.
- */
-static void
-stop_inhibiting_shutdown (void)
-{
-    G_LOCK (shutdown_inhibitor);
-
-    if (shutdown_inhibitor != SHUTDOWN_INHIBITOR_UNSET)
-      {
-        gint volatile previous_shutdown_inhibitor = shutdown_inhibitor;
-        shutdown_inhibitor = SHUTDOWN_INHIBITOR_UNSET;
-        G_UNLOCK (shutdown_inhibitor);
-
-        GError *error = NULL;
-
-        // If the system is shutting down, this daemon may be killed at any
-        // point after this statement.
-        if (!g_close (previous_shutdown_inhibitor, &error))
-          {
-            g_warning ("Failed to release shutdown inhibitor. Error: %s.",
-                       error->message);
-            g_error_free (error);
-          }
-      }
-    else
-      {
-        G_UNLOCK (shutdown_inhibitor);
-      }
+    emtr_event_recorder_record_stop_sync (emtr_event_recorder_get_default (),
+                                          USER_IS_LOGGED_IN,
+                                          session_id_variant,
+                                          NULL /* auxiliary_payload */);
 }
 
 /*
@@ -489,39 +371,19 @@ record_login (GDBusProxy *dbus_proxy,
               GVariant   *parameters,
               gpointer    user_data)
 {
-    if (strcmp ("PrepareForShutdown", signal_name) == 0)
-      {
-        gboolean shutting_down;
-        g_variant_get_child (parameters, 0, "b", &shutting_down);
-        if (shutting_down)
-          {
-            G_LOCK (humanity_by_session_id);
-            g_datalist_foreach (&humanity_by_session_id,
-                                (GDataForeachFunc) record_stop_for_login,
-                                NULL /* user_data */);
-            g_datalist_clear (&humanity_by_session_id);
-            G_UNLOCK (humanity_by_session_id);
-            stop_inhibiting_shutdown ();
-          }
-        else
-          {
-            inhibit_shutdown (dbus_proxy);
-          }
-      }
-    else if (strcmp ("SessionRemoved", signal_name) == 0 &&
-             remove_session_from_set (parameters))
+    if (strcmp ("SessionRemoved", signal_name) == 0 &&
+        remove_session_from_set (parameters))
       {
         GVariant *session_id = g_variant_get_child_value (parameters, 0);
-        emtr_event_recorder_record_stop (emtr_event_recorder_get_default (),
-                                         USER_IS_LOGGED_IN,
-                                         session_id,
-                                         NULL /* auxiliary_payload */);
+        emtr_event_recorder_record_stop_sync (emtr_event_recorder_get_default (),
+                                              USER_IS_LOGGED_IN,
+                                              session_id,
+                                              NULL /* auxiliary_payload */);
         g_variant_unref (session_id);
       }
     else if (strcmp ("SessionNew", signal_name) == 0 &&
              add_session_to_set (parameters))
       {
-        inhibit_shutdown (dbus_proxy);
         GVariant *session_id = g_variant_get_child_value (parameters, 0);
 
         guint32 user_id;
@@ -535,6 +397,17 @@ record_login (GDBusProxy *dbus_proxy,
                                           user_id_variant);
         g_variant_unref (session_id);
       }
+}
+
+static void
+record_logout_for_all_remaining_sessions (void)
+{
+    G_LOCK (humanity_by_session_id);
+    g_datalist_foreach (&humanity_by_session_id,
+                        (GDataForeachFunc) record_stop_for_login,
+                        NULL /* user_data */);
+    g_datalist_clear (&humanity_by_session_id);
+    G_UNLOCK (humanity_by_session_id);
 }
 
 static GDBusProxy *
@@ -585,7 +458,7 @@ record_network_change (GDBusProxy *dbus_proxy,
                                                  new_network_state);
 
         emtr_event_recorder_record_event (emtr_event_recorder_get_default (),
-                                          EMTR_EVENT_NETWORK_STATUS_CHANGED,
+                                          NETWORK_STATUS_CHANGED_EVENT,
                                           status_change);
 
         previous_network_state = new_network_state;
@@ -614,8 +487,8 @@ network_dbus_proxy_new (void)
       }
     else
       {
-        g_signal_connect (dbus_proxy, "g-signal", G_CALLBACK (record_network_change),
-                          NULL /* data */);
+        g_signal_connect (dbus_proxy, "g-signal",
+                          G_CALLBACK (record_network_change), NULL /* data */);
       }
     return dbus_proxy;
 }
@@ -633,26 +506,29 @@ main(int                argc,
 {
     set_start_time ();
     g_datalist_init (&humanity_by_session_id);
+
     GDBusProxy *systemd_dbus_proxy = systemd_dbus_proxy_new ();
     GDBusProxy *login_dbus_proxy = login_dbus_proxy_new ();
     GDBusProxy *network_dbus_proxy = network_dbus_proxy_new ();
+
     GMainLoop *main_loop = g_main_loop_new (NULL, TRUE);
     g_idle_add ((GSourceFunc) record_location_metric, NULL);
+
     g_unix_signal_add (SIGHUP, (GSourceFunc) quit_main_loop, main_loop);
     g_unix_signal_add (SIGINT, (GSourceFunc) quit_main_loop, main_loop);
     g_unix_signal_add (SIGTERM, (GSourceFunc) quit_main_loop, main_loop);
     g_unix_signal_add (SIGUSR1, (GSourceFunc) quit_main_loop, main_loop);
     g_unix_signal_add (SIGUSR2, (GSourceFunc) quit_main_loop, main_loop);
+
     g_main_loop_run (main_loop);
 
+    record_logout_for_all_remaining_sessions ();
     record_shutdown ();
+
     g_main_loop_unref (main_loop);
     g_clear_object (&systemd_dbus_proxy);
     g_clear_object (&login_dbus_proxy);
     g_clear_object (&network_dbus_proxy);
-    G_LOCK (humanity_by_session_id);
-    g_datalist_clear (&humanity_by_session_id);
-    G_UNLOCK (humanity_by_session_id);
-    stop_inhibiting_shutdown ();
+
     return EXIT_SUCCESS;
 }

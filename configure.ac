@@ -49,10 +49,12 @@ AC_INIT([EOS Metrics Instrumentation Daemons], [_EOS_INSTRUMENTATION_VERSION_MAC
 	[], [eos-metrics-instrumentation], [http://endlessm.com])
 # Verify that the source directory can be found
 AC_CONFIG_SRCDIR([src/eos-metrics-instrumentation.c])
-# Initialize Automake: enable all warnings and do not insist on GNU standards
-# no-portability suppresses warnings about syntax specific to GNU make
+# Initialize Automake: enable all warnings and do not insist on GNU standards.
+# no-portability suppresses warnings about syntax specific to GNU make.
 # parallel-tests specifies that we use the new parallel-running test harness.
-# Unlike serial-tests, this option is accepted by Automake 1.11
+# Unlike serial-tests, this option is accepted by Automake 1.11.
+# subdir-objects ensures forward compatibility with Automake 2.0 and can be
+# removed when this behavior becomes the default.
 # tar-ustar is required because there may be files whose entire paths exceed
 # 99 characters.
 AM_INIT_AUTOMAKE([-Wall -Wno-portability foreign 1.11 parallel-tests
@@ -80,7 +82,7 @@ AC_DEFINE([EOS_INSTRUMENTATION_VERSION], [_EOS_INSTRUMENTATION_VERSION_MACRO], [
 
 # Required versions of libraries
 # Update these whenever you use a function that requires a certain API version
-EOS_METRICS_REQUIREMENT="eosmetrics-0"
+EOS_METRICS_REQUIREMENT="eosmetrics-0 >= 0.3.0"
 GEOCLUE_REQUIREMENT="geoclue-2.0"
 GLIB_REQUIREMENT="glib-2.0"
 GIO_REQUIREMENT="gio-2.0"
