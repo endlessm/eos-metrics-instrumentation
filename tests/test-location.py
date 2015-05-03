@@ -181,8 +181,10 @@ class TestLocationIntegration(dbusmock.DBusTestCase):
         self.quit_on('RecordSingularEvent')
         self.mainloop.run()
 
-        args = self.metrics_mock.GetCalls()[0][2]
-        event_id = ''.join(map(chr, args[1]))
+        calls = self.metrics_mock.GetCalls()
+        args = calls[0][2]
+        event_id_as_dbus_bytes = args[1]
+        event_id = ''.join(map(chr, event_id_as_dbus_bytes))
         payload = args[4]
 
         self.assertEquals(event_id,
