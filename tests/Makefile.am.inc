@@ -25,7 +25,7 @@ TESTS = \
 	tests/test-location.py \
 	$(NULL)
 TEST_EXTENSIONS = .py
-PY_LOG_COMPILER = python
+PY_LOG_COMPILER = python3
 
 TEST_FLAGS = \
 	@EOS_INSTRUMENTATION_CFLAGS@ \

@@ -22,6 +22,7 @@ import os
 import subprocess
 import tempfile
 import unittest
+import uuid
 
 import dbusmock
 from gi.repository import GLib
@@ -44,7 +45,7 @@ MOCK_ACCURACY = 50000.0
 MOCK_ALTITUDE = 31.0
 UNKNOWN_ALTITUDE = -1.797693e+308  # minimum double value = unknown
 CITY_LEVEL_ACCURACY = 4  # from GeoClue2 spec
-
+USER_LOCATION_EVENT = uuid.UUID('abe7af92-6704-4d34-93cf-8f1b46eb09b8')
 
 class TestLocationIntegration(dbusmock.DBusTestCase):
     """
@@ -172,6 +173,10 @@ class TestLocationIntegration(dbusmock.DBusTestCase):
         accuracy = self.geoclue_client.Get('', 'RequestedAccuracyLevel')
         self.assertEquals(CITY_LEVEL_ACCURACY, accuracy)
 
+    def dbus_bytes_to_uuid(self, dbus_byte_array):
+        bytes_as_bytes = bytes(dbus_byte_array)
+        return uuid.UUID(bytes=bytes_as_bytes)
+
     def test_daemon_sends_event(self):
         self.quit_on('Start')
         self.mainloop.run()
@@ -184,11 +189,10 @@ class TestLocationIntegration(dbusmock.DBusTestCase):
         calls = self.metrics_mock.GetCalls()
         args = calls[0][2]
         event_id_as_dbus_bytes = args[1]
-        event_id = ''.join(map(chr, event_id_as_dbus_bytes))
+        event_id = self.dbus_bytes_to_uuid(event_id_as_dbus_bytes)
         payload = args[4]
 
-        self.assertEquals(event_id,
-            'abe7af9267044d3493cf8f1b46eb09b8'.decode('hex'))
+        self.assertEquals(event_id, USER_LOCATION_EVENT)
 
         self.assertEquals(payload[0], MOCK_LATITUDE)
         self.assertEquals(payload[1], MOCK_LONGITUDE)
