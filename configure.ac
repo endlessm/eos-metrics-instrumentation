@@ -163,6 +163,9 @@ PKG_CHECK_MODULES([EOS_INSTRUMENTATION], [
     $GIO_REQUIREMENT
 ])
 
+# This indicates a required dbus mocking interface for unit testing.
+AX_PYTHON_MODULE_VERSION([dbusmock], 0.10)
+
 AC_MSG_CHECKING([for Geoclue2 DBus interface file])
 GEOCLUE_DBUS_INTERFACE_XML=`pkg-config --variable=dbus_interface geoclue-2.0`
 AS_IF([test "x$GEOCLUE_DBUS_INTERFACE_XML" = "x"],
