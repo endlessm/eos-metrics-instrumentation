@@ -177,21 +177,6 @@ test_persistent_tally_resets_when_no_file (Fixture      *fixture,
 }
 
 static void
-test_persistent_tally_resets_when_no_group (Fixture      *fixture,
-                                            gconstpointer unused)
-{
-  write_key_file (fixture, EMPTY_KEY_FILE);
-
-  gint64 tally = -1;
-  gboolean read_succeeded =
-    eins_persistent_tally_get_tally (fixture->persistent_tally, &tally);
-
-  g_assert_true (read_succeeded);
-
-  g_assert_cmpint (tally, ==, 0);
-}
-
-static void
 test_persistent_tally_aborts_when_corrupted (Fixture      *fixture,
                                              gconstpointer unused)
 {
@@ -231,8 +216,6 @@ main (int                argc,
                                   test_persistent_tally_can_add_to_tally);
   ADD_PERSISTENT_TALLY_TEST_FUNC ("/persistent-tally/resets-when-no-file",
                                   test_persistent_tally_resets_when_no_file);
-  ADD_PERSISTENT_TALLY_TEST_FUNC ("/persistent-tally/resets-when-no-group",
-                                  test_persistent_tally_resets_when_no_group);
   ADD_PERSISTENT_TALLY_TEST_FUNC ("/persistent-tally/aborts-when-corrupted",
                                   test_persistent_tally_aborts_when_corrupted);
 

@@ -207,20 +207,7 @@ read_tally (EinsPersistentTally *self)
 
   priv->tally = g_key_file_get_int64 (priv->key_file, GROUP, priv->key, &error);
   if (error != NULL)
-    {
-      if (g_error_matches (error, G_KEY_FILE_ERROR,
-                           G_KEY_FILE_ERROR_NOT_FOUND) ||
-          g_error_matches (error, G_KEY_FILE_ERROR,
-                           G_KEY_FILE_ERROR_GROUP_NOT_FOUND) ||
-          g_error_matches (error, G_KEY_FILE_ERROR,
-                           G_KEY_FILE_ERROR_KEY_NOT_FOUND))
-        {
-          g_error_free (error);
-          return write_tally (self, 0);
-        }
-
-      goto handle_failed_read;
-    }
+    goto handle_failed_read;
 
   priv->tally_cached = TRUE;
   return TRUE;
