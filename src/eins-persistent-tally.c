@@ -158,14 +158,15 @@ write_tally (EinsPersistentTally *self,
       if (parent_path != NULL)
         {
           gint status_code = g_mkdir_with_parents (parent_path, MODE);
-          g_free (parent_path);
           if (status_code != 0)
             {
               gint error_number = errno;
+              g_free (parent_path);
               g_critical ("Failed to create directory. Error: %s.",
                           g_strerror (error_number));
               return FALSE;
             }
+          g_free (parent_path);
         }
     }
 
