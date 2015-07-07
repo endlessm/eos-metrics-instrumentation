@@ -165,7 +165,7 @@ static void
 test_persistent_tally_resets_when_no_file (Fixture      *fixture,
                                            gconstpointer unused)
 {
-  g_unlink (fixture->tmp_path);
+  g_assert_cmpint (g_unlink (fixture->tmp_path), ==, 0);
 
   gint64 tally = -1;
   gboolean read_succeeded =
