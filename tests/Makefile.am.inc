@@ -23,8 +23,9 @@ noinst_PROGRAMS += \
 TESTS = \
 	tests/test-persistent-tally \
 	tests/test-location.py \
+	run_coverage.coverage \
 	$(NULL)
-TEST_EXTENSIONS = .py
+TEST_EXTENSIONS = .py .coverage
 PY_LOG_COMPILER = python3
 
 TEST_FLAGS = \
@@ -45,3 +46,5 @@ tests_test_persistent_tally_CPPFLAGS = $(TEST_FLAGS)
 tests_test_persistent_tally_LDADD = $(TEST_LIBS)
 
 EXTRA_DIST += tests/test-location.py
+
+clean-local:: clean-coverage
