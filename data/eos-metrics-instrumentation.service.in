@@ -1,8 +1,8 @@
 [Unit]
 Description=EndlessOS Metrics Instrumentation
-Requires=dbus.service eos-metrics-event-recorder.service
-Wants=dbus-org.freedesktop.GeoClue2.service
-After=dbus.service eos-metrics-event-recorder.service dbus-org.freedesktop.GeoClue2.service
+Requires=eos-metrics-event-recorder.service
+Wants=geoclue.service
+After=eos-metrics-event-recorder.service
 Before=dbus-org.freedesktop.login1.service systemd-logind.service systemd-user-sessions.service
 
 [Service]
