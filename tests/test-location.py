@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 # Copyright (c) 2015 Endless Mobile, Inc.
 
 # This file is part of eos-metrics-instrumentation.
