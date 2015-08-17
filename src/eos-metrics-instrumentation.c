@@ -67,10 +67,7 @@
  */
 #define NETWORK_STATUS_CHANGED_EVENT "5fae6179-e108-4962-83be-c909259c0584"
 
-// Protected by humanity_by_session_id lock.
 static GData *humanity_by_session_id;
-
-G_LOCK_DEFINE_STATIC (humanity_by_session_id);
 
 static gboolean start_time_set = FALSE;
 
@@ -303,9 +300,7 @@ add_session_to_set (GVariant *session_parameters)
 
     gchar *session_id;
     g_variant_get_child (session_parameters, 0, "s", &session_id);
-    G_LOCK (humanity_by_session_id);
     g_datalist_set_data (&humanity_by_session_id, session_id, (gpointer) TRUE);
-    G_UNLOCK (humanity_by_session_id);
     g_free (session_id);
     return TRUE;
 }
@@ -321,14 +316,11 @@ remove_session_from_set (GVariant *session_parameters)
     gchar *session_id;
     g_variant_get_child (session_parameters, 0, "s", &session_id);
 
-    G_LOCK (humanity_by_session_id);
     gboolean is_human = (gboolean) g_datalist_get_data (&humanity_by_session_id,
                                                         session_id);
 
     if (is_human)
       g_datalist_remove_data (&humanity_by_session_id, session_id);
-
-    G_UNLOCK (humanity_by_session_id);
 
     g_free (session_id);
     return is_human;
@@ -402,12 +394,10 @@ record_login (GDBusProxy *dbus_proxy,
 static void
 record_logout_for_all_remaining_sessions (void)
 {
-    G_LOCK (humanity_by_session_id);
     g_datalist_foreach (&humanity_by_session_id,
                         (GDataForeachFunc) record_stop_for_login,
                         NULL /* user_data */);
     g_datalist_clear (&humanity_by_session_id);
-    G_UNLOCK (humanity_by_session_id);
 }
 
 static GDBusProxy *
@@ -438,8 +428,6 @@ login_dbus_proxy_new (void)
 
 static volatile guint32 previous_network_state = 0; // NM_STATE_UNKNOWM
 
-G_LOCK_DEFINE_STATIC (previous_network_state);
-
 static void
 record_network_change (GDBusProxy *dbus_proxy,
                        gchar      *sender_name,
@@ -452,8 +440,6 @@ record_network_change (GDBusProxy *dbus_proxy,
         guint32 new_network_state;
         g_variant_get (parameters, "(u)", &new_network_state);
 
-        G_LOCK (previous_network_state);
-
         GVariant *status_change = g_variant_new ("(uu)", previous_network_state,
                                                  new_network_state);
 
@@ -462,8 +448,6 @@ record_network_change (GDBusProxy *dbus_proxy,
                                           status_change);
 
         previous_network_state = new_network_state;
-
-        G_UNLOCK (previous_network_state);
       }
 }
 
