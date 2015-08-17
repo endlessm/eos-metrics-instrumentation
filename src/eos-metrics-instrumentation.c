@@ -67,10 +67,7 @@
  */
 #define NETWORK_STATUS_CHANGED_EVENT "5fae6179-e108-4962-83be-c909259c0584"
 
-// Protected by humanity_by_session_id lock.
 static GData *humanity_by_session_id;
-
-G_LOCK_DEFINE_STATIC (humanity_by_session_id);
 
 static gboolean start_time_set = FALSE;
 
@@ -220,17 +217,16 @@ systemd_dbus_proxy_new (void)
 }
 
 /*
- * Populate user_id with the user ID of the user associated with the SessionNew
- * or SessionRemoved signal with the given parameters. user_id must already be
- * allocated and non-NULL. Return TRUE if user_id was successfully populated and
+ * Populate user_id with the user ID of the user associated with the given
+ * logind session object at session_path. user_id must already be allocated
+ * and non-NULL. Return TRUE if user_id was successfully populated and
  * FALSE otherwise, in which case its contents should be ignored.
  */
 static gboolean
-get_user_id (GVariant *session_parameters, guint32 *user_id)
+get_user_id (const gchar *session_path,
+             guint32     *user_id)
 {
     GError *error = NULL;
-    gchar *session_path;
-    g_variant_get_child (session_parameters, 1, "o", &session_path);
     GDBusProxy *dbus_proxy =
       g_dbus_proxy_new_for_bus_sync (G_BUS_TYPE_SYSTEM,
                                      G_DBUS_PROXY_FLAGS_NONE,
@@ -240,7 +236,6 @@ get_user_id (GVariant *session_parameters, guint32 *user_id)
                                      "org.freedesktop.DBus.Properties",
                                      NULL /* GCancellable */,
                                      &error);
-    g_free (session_path);
 
     if (dbus_proxy == NULL)
       {
@@ -276,62 +271,51 @@ get_user_id (GVariant *session_parameters, guint32 *user_id)
     return TRUE;
 }
 
-/*
- * Return TRUE if the given parameters of a SessionNew or SessionRemoved signal
- * correspond to a human session. If the given parameters don't correspond to a
- * human session, or this can't be determined, return FALSE.
- */
 static gboolean
-is_human_session (GVariant *session_parameters)
+is_human_session (const gchar *session_id)
 {
-    guint32 user_id;
-    if (!get_user_id (session_parameters, &user_id))
-      return FALSE;
-    return user_id >= MIN_HUMAN_USER_ID;
+    /* All normal user sessions start with digits -- greeter sessions
+     * start with 'c'.
+     */
+    return g_ascii_isdigit (session_id[0]);
+}
+
+static gboolean
+session_in_set (const gchar *session_id)
+{
+    gpointer data = g_datalist_get_data (&humanity_by_session_id, session_id);
+    return (gboolean) GPOINTER_TO_UINT (data);
 }
 
 /*
- * If the given parameters of a SessionNew or SessionRemoved signal correspond
- * to a human session, return TRUE and add the corresponding session_id to the
+ * If the given session_id corresponds to a human session not already in the
+ * set, return TRUE and add the corresponding session_id to the
  * humanity_by_session_id set. Otherwise, return FALSE.
  */
 static gboolean
-add_session_to_set (GVariant *session_parameters)
+add_session_to_set (const gchar *session_id)
 {
-    if (!is_human_session (session_parameters))
+    if (!is_human_session (session_id) || session_in_set (session_id))
       return FALSE;
 
-    gchar *session_id;
-    g_variant_get_child (session_parameters, 0, "s", &session_id);
-    G_LOCK (humanity_by_session_id);
-    g_datalist_set_data (&humanity_by_session_id, session_id, (gpointer) TRUE);
-    G_UNLOCK (humanity_by_session_id);
-    g_free (session_id);
+    g_datalist_set_data (&humanity_by_session_id, session_id,
+                         GUINT_TO_POINTER (TRUE));
     return TRUE;
 }
 
 /*
- * If the given parameters of a SessionNew or SessionRemoved signal correspond
- * to a human session that is currently in the humanity_by_session_id set,
- * return TRUE and remove the session from the set. Otherwise, return FALSE.
+ * If the given session_id corresponds to a human session tracked inside the
+ * humanity_by_session_id set, remove it and return TRUE. Otherwise, return
+ * FALSE.
  */
 static gboolean
-remove_session_from_set (GVariant *session_parameters)
+remove_session_from_set (const gchar *session_id)
 {
-    gchar *session_id;
-    g_variant_get_child (session_parameters, 0, "s", &session_id);
+    if (!is_human_session (session_id) || !session_in_set (session_id))
+      return FALSE;
 
-    G_LOCK (humanity_by_session_id);
-    gboolean is_human = (gboolean) g_datalist_get_data (&humanity_by_session_id,
-                                                        session_id);
-
-    if (is_human)
-      g_datalist_remove_data (&humanity_by_session_id, session_id);
-
-    G_UNLOCK (humanity_by_session_id);
-
-    g_free (session_id);
-    return is_human;
+    g_datalist_remove_data (&humanity_by_session_id, session_id);
+    return TRUE;
 }
 
 /*
@@ -348,6 +332,34 @@ record_stop_for_login (GQuark   session_id_quark,
     emtr_event_recorder_record_stop_sync (emtr_event_recorder_get_default (),
                                           USER_IS_LOGGED_IN,
                                           session_id_variant,
+                                          NULL /* auxiliary_payload */);
+}
+
+static void
+add_session (const gchar *session_id,
+             guint32      user_id)
+{
+    if (!add_session_to_set (session_id))
+      return;
+
+    GVariant *user_id_variant =
+      (user_id >= MIN_HUMAN_USER_ID) ? g_variant_new_uint32 (user_id) : NULL;
+
+    emtr_event_recorder_record_start (emtr_event_recorder_get_default (),
+                                      USER_IS_LOGGED_IN,
+                                      g_variant_new_string (session_id),
+                                      user_id_variant);
+}
+
+static void
+remove_session (const gchar *session_id)
+{
+    if (!remove_session_from_set (session_id))
+      return;
+
+    emtr_event_recorder_record_stop_sync (emtr_event_recorder_get_default (),
+                                          USER_IS_LOGGED_IN,
+                                          g_variant_new_string (session_id),
                                           NULL /* auxiliary_payload */);
 }
 
@@ -371,43 +383,33 @@ record_login (GDBusProxy *dbus_proxy,
               GVariant   *parameters,
               gpointer    user_data)
 {
-    if (strcmp ("SessionRemoved", signal_name) == 0 &&
-        remove_session_from_set (parameters))
+    if (strcmp ("SessionRemoved", signal_name) == 0)
       {
-        GVariant *session_id = g_variant_get_child_value (parameters, 0);
-        emtr_event_recorder_record_stop_sync (emtr_event_recorder_get_default (),
-                                              USER_IS_LOGGED_IN,
-                                              session_id,
-                                              NULL /* auxiliary_payload */);
-        g_variant_unref (session_id);
+        const gchar *session_id;
+        g_variant_get (parameters, "&s", &session_id);
+
+        remove_session (session_id);
       }
-    else if (strcmp ("SessionNew", signal_name) == 0 &&
-             add_session_to_set (parameters))
+    else if (strcmp ("SessionNew", signal_name) == 0)
       {
-        GVariant *session_id = g_variant_get_child_value (parameters, 0);
+        const gchar *session_id, *session_path;
+        g_variant_get (parameters, "&s&o", &session_id, &session_path);
 
         guint32 user_id;
-        gboolean user_id_is_valid = get_user_id (parameters, &user_id);
-        GVariant *user_id_variant = user_id_is_valid ?
-          g_variant_new_uint32 (user_id) : NULL;
+        if (!get_user_id (session_path, &user_id))
+          return;
 
-        emtr_event_recorder_record_start (emtr_event_recorder_get_default (),
-                                          USER_IS_LOGGED_IN,
-                                          session_id,
-                                          user_id_variant);
-        g_variant_unref (session_id);
+        add_session (session_id, user_id);
       }
 }
 
 static void
 record_logout_for_all_remaining_sessions (void)
 {
-    G_LOCK (humanity_by_session_id);
     g_datalist_foreach (&humanity_by_session_id,
                         (GDataForeachFunc) record_stop_for_login,
                         NULL /* user_data */);
     g_datalist_clear (&humanity_by_session_id);
-    G_UNLOCK (humanity_by_session_id);
 }
 
 static GDBusProxy *
@@ -423,22 +425,44 @@ login_dbus_proxy_new (void)
                                      "org.freedesktop.login1.Manager",
                                      NULL /* GCancellable */,
                                      &error);
-    if (dbus_proxy == NULL)
+    if (error)
       {
-        g_warning ("Error creating GDBusProxy: %s\n", error->message);
+        g_warning ("Error creating GDBusProxy: %s.", error->message);
         g_error_free (error);
+        return NULL;
       }
-    else
+
+    g_signal_connect (dbus_proxy, "g-signal", G_CALLBACK (record_login),
+                      NULL /* data */);
+
+    GVariant *sessions =
+      g_dbus_proxy_call_sync (dbus_proxy, "ListSessions", NULL,
+                              G_DBUS_CALL_FLAGS_NONE, -1, NULL, &error);
+    if (error)
       {
-        g_signal_connect (dbus_proxy, "g-signal", G_CALLBACK (record_login),
-                          NULL /* data */);
+        g_warning ("Error calling ListSessions: %s.", error->message);
+        g_error_free (error);
+        return NULL;
       }
+
+    GVariantIter *session_iter;
+    g_variant_get (sessions, "a(susso)", &session_iter);
+
+    const gchar *session_id;
+    guint32 user_id;
+    while (g_variant_iter_loop (session_iter, "(&suss&o)", &session_id,
+                                &user_id, NULL, NULL, NULL))
+      {
+        add_session (session_id, user_id);
+      }
+
+    g_variant_iter_free (session_iter);
+    g_variant_unref (sessions);
+
     return dbus_proxy;
 }
 
 static volatile guint32 previous_network_state = 0; // NM_STATE_UNKNOWM
-
-G_LOCK_DEFINE_STATIC (previous_network_state);
 
 static void
 record_network_change (GDBusProxy *dbus_proxy,
@@ -452,8 +476,6 @@ record_network_change (GDBusProxy *dbus_proxy,
         guint32 new_network_state;
         g_variant_get (parameters, "(u)", &new_network_state);
 
-        G_LOCK (previous_network_state);
-
         GVariant *status_change = g_variant_new ("(uu)", previous_network_state,
                                                  new_network_state);
 
@@ -462,8 +484,6 @@ record_network_change (GDBusProxy *dbus_proxy,
                                           status_change);
 
         previous_network_state = new_network_state;
-
-        G_UNLOCK (previous_network_state);
       }
 }
 
