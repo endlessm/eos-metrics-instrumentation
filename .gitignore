@@ -40,3 +40,4 @@ data/eos-metrics-instrumentation.service
 *.gcda
 *.gcno
 /_coverage
+run_coverage.coverage
