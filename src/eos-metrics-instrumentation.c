@@ -446,7 +446,7 @@ login_dbus_proxy_new (void)
       }
 
     GVariantIter *session_iter;
-    g_variant_get (sessions, "a(susso)", &session_iter);
+    g_variant_get (sessions, "(a(susso))", &session_iter);
 
     const gchar *session_id;
     guint32 user_id;
