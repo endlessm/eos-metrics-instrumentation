@@ -128,6 +128,8 @@ class TestLocationIntegration(dbusmock.DBusTestCase):
                                           dbus_interface=dbusmock.MOCK_IFACE)
         self.mainloop = GLib.MainLoop()
         self._quit_on_method = ''
+        self._quit_on_uuid = None
+        self._event_args = None
 
         self.daemon = subprocess.Popen('./eos-metrics-instrumentation')
 
@@ -156,10 +158,33 @@ class TestLocationIntegration(dbusmock.DBusTestCase):
         GLib.timeout_add_seconds(20, self.fail, 'Test timed out after ' +
                                  'waiting 20 seconds for D-Bus method call.')
 
+    def quit_on_singular_event(self, event_uuid):
+        """Quit the main loop when RecordSingularEvent is called for @event_uuid.
+        Timeout after waiting for 20 seconds. Use like this:
+            self.quit_on_singular_event(uuid.UUID('my-uuid'))
+            self.mainloop.run()
+            # Now event my-uuid has been received.
+        """
+        self._quit_on_uuid = event_uuid
+        self.quit_on('RecordSingularEvent');
+
     def handle_dbus_event_received(self, name, *args):
         if name == self._quit_on_method:
+            if self._quit_on_uuid is not None:
+                event_id_as_dbus_bytes = args[0][1]
+                event_id = self.dbus_bytes_to_uuid(event_id_as_dbus_bytes)
+                if event_id != self._quit_on_uuid:
+                    return
+                self._quit_on_uuid = None
+                self._event_args = args[0]
+
             self.mainloop.quit()
             self._quit_on_method = ''
+
+    def retrieve_event_args(self):
+        args = self._event_args
+        self._event_args = None
+        return args
 
     def test_daemon_identifies_itself_to_geoclue(self):
         self.quit_on('Start')
@@ -185,11 +210,10 @@ class TestLocationIntegration(dbusmock.DBusTestCase):
 
         self.geoclue_client.EmitSignal('', 'LocationUpdated', 'oo',
             [GEOCLUE_LOCATION_PATH, GEOCLUE_LOCATION_PATH])
-        self.quit_on('RecordSingularEvent')
+        self.quit_on_singular_event(USER_LOCATION_EVENT)
         self.mainloop.run()
 
-        calls = self.metrics_mock.GetCalls()
-        args = calls[0][2]
+        args = self.retrieve_event_args()
         event_id_as_dbus_bytes = args[1]
         event_id = self.dbus_bytes_to_uuid(event_id_as_dbus_bytes)
         payload = args[4]
@@ -210,10 +234,11 @@ class TestLocationIntegration(dbusmock.DBusTestCase):
             'Altitude', UNKNOWN_ALTITUDE)
         self.geoclue_client.EmitSignal('', 'LocationUpdated', 'oo',
             [GEOCLUE_LOCATION_PATH, GEOCLUE_LOCATION_PATH])
-        self.quit_on('RecordSingularEvent')
+        self.quit_on_singular_event(USER_LOCATION_EVENT)
         self.mainloop.run()
 
-        payload = self.metrics_mock.GetCalls()[0][2][4]
+        args = self.retrieve_event_args()
+        payload = args[4]
 
         self.assertEquals(payload[2], False)
 
