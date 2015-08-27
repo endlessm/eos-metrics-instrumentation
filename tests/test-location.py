@@ -152,7 +152,7 @@ class TestLocationIntegration(dbusmock.DBusTestCase):
         Timeout after waiting for 20 seconds. Use like this:
             self.quit_on('MyMethod')
             self.mainloop.run()
-            # now MyMethod has been called
+            # Now MyMethod has been called.
         """
         self._quit_on_method = method_name
         GLib.timeout_add_seconds(20, self.fail, 'Test timed out after ' +
