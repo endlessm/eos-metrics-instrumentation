@@ -67,6 +67,17 @@
  */
 #define NETWORK_STATUS_CHANGED_EVENT "5fae6179-e108-4962-83be-c909259c0584"
 
+/* Recorded at every startup to track deployment statistics. The auxiliary
+ * payload is a 3-tuple of the form (os_name, os_version, eos_personality).
+ */
+#define OS_VERSION_EVENT "1fa16a31-9225-467e-8502-e31806e9b4eb"
+
+#define OS_RELEASE_FILE "/etc/os-release"
+
+#define PERSONALITY_FILE_PATH "/etc/EndlessOS/personality.conf"
+#define PERSONALITY_CONFIG_GROUP "Personality"
+#define PERSONALITY_KEY "PersonalityName"
+
 static GData *humanity_by_session_id;
 
 static gboolean start_time_set = FALSE;
@@ -74,6 +85,127 @@ static gboolean start_time_set = FALSE;
 static gint64 start_time;
 
 static EinsPersistentTally *persistent_tally;
+
+static gboolean
+get_os_version (gchar **name_out,
+                gchar **version_out)
+{
+    GError *error = NULL;
+    gboolean succeeded = FALSE;
+    gchar *name = NULL;
+    gchar *version = NULL;
+
+    GFile *os_release_file = g_file_new_for_path (OS_RELEASE_FILE);
+    GFileInputStream *file_stream =
+      g_file_read (os_release_file, NULL, &error);
+    g_object_unref (os_release_file);
+
+    if (error)
+      goto out;
+
+    GDataInputStream *data_stream =
+      g_data_input_stream_new (G_INPUT_STREAM (file_stream));
+    g_object_unref (file_stream);
+
+    while (!name || !version)
+      {
+        gchar *line =
+          g_data_input_stream_read_line (data_stream, NULL, NULL, &error);
+        if (!line)
+          break;
+
+        if (g_str_has_prefix (line, "NAME="))
+          name = line;
+        else if (g_str_has_prefix (line, "VERSION="))
+          version = line;
+        else
+          g_free (line);
+      }
+
+    g_object_unref (data_stream);
+
+    if (error)
+      goto out;
+
+    if (!name || !version)
+      {
+        g_warning ("Could not find at least one of NAME or VERSION keys in "
+                   OS_RELEASE_FILE ".");
+        goto out;
+      }
+
+    /* According to os-release(5), these values can be quoted, escaped,
+     * etc. For simplicity, instead of doing the parsing on the client
+     * side, we do it on the server side.
+     */
+    *name_out = g_strdup (name + strlen ("NAME="));
+    *version_out = g_strdup (version + strlen ("VERSION="));
+
+    succeeded = TRUE;
+
+ out:
+    if (error)
+      {
+        g_warning ("Error reading " OS_RELEASE_FILE ": %s.", error->message);
+        g_error_free (error);
+      }
+
+    g_free (name);
+    g_free (version);
+
+    return succeeded;
+}
+
+static gchar *
+get_eos_personality (void)
+{
+    gchar *personality = NULL;
+    GKeyFile *key_file = g_key_file_new ();
+
+    /* We ignore errors here since the personality file will be
+     * missing from e.g. base images.
+     */
+    if (!g_key_file_load_from_file (key_file, PERSONALITY_FILE_PATH,
+                                    G_KEY_FILE_NONE, NULL))
+      goto out;
+
+    GError *error = NULL;
+    personality = g_key_file_get_string (key_file, PERSONALITY_CONFIG_GROUP,
+                                         PERSONALITY_KEY, &error);
+
+    if (error != NULL)
+      {
+        g_warning ("Could not read " PERSONALITY_KEY " from "
+                   PERSONALITY_FILE_PATH ": %s.", error->message);
+        g_error_free (error);
+      }
+
+ out:
+    g_key_file_unref (key_file);
+
+    return (personality != NULL) ? personality : g_strdup ("");
+}
+
+static void
+record_os_version (void)
+{
+    gchar *os_name = NULL;
+    gchar *os_version = NULL;
+
+    if (!get_os_version (&os_name, &os_version))
+      return;
+
+    gchar *eos_personality = get_eos_personality ();
+
+    GVariant *payload = g_variant_new ("(sss)",
+                                       os_name, os_version, eos_personality);
+    emtr_event_recorder_record_event (emtr_event_recorder_get_default (),
+                                      OS_VERSION_EVENT, payload);
+
+    g_free (os_name);
+    g_free (os_version);
+    g_free (eos_personality);
+}
 
 /*
  * Handle a signal from the systemd manager by recording the StartupFinished
@@ -539,6 +671,8 @@ main(int                argc,
     g_unix_signal_add (SIGTERM, (GSourceFunc) quit_main_loop, main_loop);
     g_unix_signal_add (SIGUSR1, (GSourceFunc) quit_main_loop, main_loop);
     g_unix_signal_add (SIGUSR2, (GSourceFunc) quit_main_loop, main_loop);
+
+    record_os_version ();
 
     g_main_loop_run (main_loop);
 
