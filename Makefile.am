@@ -37,6 +37,9 @@ AM_DISTCHECK_CONFIGURE_FLAGS = \
         --enable-strict-flags \
         --with-systemdsystemunitdir='$${libdir}/systemd/system' \
         $(NULL)
+if EOS_ENABLE_COVERAGE
+AM_DISTCHECK_CONFIGURE_FLAGS += --enable-coverage --with-coverage-dir=@EOS_COVERAGE_DIR@
+endif EOS_ENABLE_COVERAGE
 
 # Generated files that 'make clean' should erase
 CLEANFILES =
