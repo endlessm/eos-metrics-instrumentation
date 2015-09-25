@@ -518,14 +518,14 @@ record_login (GDBusProxy *dbus_proxy,
     if (strcmp ("SessionRemoved", signal_name) == 0)
       {
         const gchar *session_id;
-        g_variant_get (parameters, "&s", &session_id);
+        g_variant_get (parameters, "(&s&o)", &session_id, NULL);
 
         remove_session (session_id);
       }
     else if (strcmp ("SessionNew", signal_name) == 0)
       {
         const gchar *session_id, *session_path;
-        g_variant_get (parameters, "&s&o", &session_id, &session_path);
+        g_variant_get (parameters, "(&s&o)", &session_id, &session_path);
 
         guint32 user_id;
         if (!get_user_id (session_path, &user_id))
