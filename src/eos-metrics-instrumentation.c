@@ -43,7 +43,7 @@
  * signed integer. This running total accumulates across boots and excludes time
  * the computer spends suspended.
  */
-#define SHUTDOWN "ae391c82-1937-4ae5-8539-8d1aceed037d"
+#define SHUTDOWN_EVENT "ae391c82-1937-4ae5-8539-8d1aceed037d"
 
 #define UPTIME_KEY "uptime"
 
@@ -297,7 +297,8 @@ record_shutdown (void)
 
     GVariant *uptime_tally_variant = g_variant_new_int64 (uptime_tally);
     emtr_event_recorder_record_event_sync (emtr_event_recorder_get_default (),
-                                           SHUTDOWN, uptime_tally_variant);
+                                           SHUTDOWN_EVENT,
+                                           uptime_tally_variant);
 
     g_object_unref (persistent_tally);
 }
