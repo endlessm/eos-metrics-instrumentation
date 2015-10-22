@@ -51,7 +51,7 @@ on_location_proxy_ready (GObject      *obj,
   if (error != NULL)
     {
       if (!g_error_matches (error, G_IO_ERROR, G_IO_ERROR_CANCELLED))
-        g_critical ("Failed to get location from GeoClue: %s", error->message);
+        g_critical ("Failed to get location from GeoClue: %s.", error->message);
       g_error_free (error);
       return;
     }
@@ -97,7 +97,7 @@ on_start_ready (GeoclueClient *client,
   if (!geoclue_client_call_start_finish (client, res, &error))
     {
       if (!g_error_matches (error, G_IO_ERROR, G_IO_ERROR_CANCELLED))
-        g_critical ("Failed to start GeoClue2 client: %s", error->message);
+        g_critical ("Failed to start GeoClue2 client: %s.", error->message);
       g_error_free (error);
     }
 }
@@ -112,7 +112,7 @@ on_client_proxy_ready (GObject      *obj,
   if (error != NULL)
     {
       if (!g_error_matches (error, G_IO_ERROR, G_IO_ERROR_CANCELLED))
-        g_critical ("Failed to get GeoClue client: %s", error->message);
+        g_critical ("Failed to get GeoClue client: %s.", error->message);
       g_error_free (error);
       return;
     }
@@ -140,7 +140,7 @@ on_get_client_ready (GeoclueManager *manager,
                                                &error))
     {
       if (!g_error_matches (error, G_IO_ERROR, G_IO_ERROR_CANCELLED))
-        g_critical ("Failed to get GeoClue client: %s", error->message);
+        g_critical ("Failed to get GeoClue client: %s.", error->message);
       g_error_free (error);
       return;
     }
@@ -165,7 +165,8 @@ on_manager_proxy_ready (GObject      *obj,
   if (error != NULL)
     {
       if (!g_error_matches (error, G_IO_ERROR, G_IO_ERROR_CANCELLED))
-        g_critical ("Failed to get GeoClue manager object: %s", error->message);
+        g_critical ("Failed to get GeoClue manager object: %s.",
+                    error->message);
       g_error_free (error);
       return;
     }

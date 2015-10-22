@@ -196,11 +196,11 @@ test_persistent_tally_aborts_when_corrupted (Fixture      *fixture,
   g_test_assert_expected_messages ();
 }
 
-int
-main (int                argc,
-      const char * const argv[])
+gint
+main (gint                argc,
+      const gchar * const argv[])
 {
-  g_test_init (&argc, (char ***) &argv, NULL);
+  g_test_init (&argc, (gchar ***) &argv, NULL);
 #define ADD_PERSISTENT_TALLY_TEST_FUNC(path, func) \
   g_test_add ((path), Fixture, NULL, setup, (func), teardown)
 
