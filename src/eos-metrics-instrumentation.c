@@ -78,13 +78,11 @@
 #define PERSONALITY_CONFIG_GROUP "Personality"
 #define PERSONALITY_KEY "PersonalityName"
 
-static GData *humanity_by_session_id;
-
 static gboolean start_time_set = FALSE;
-
 static gint64 start_time;
-
 static EinsPersistentTally *persistent_tally;
+
+static GData *humanity_by_session_id;
 
 static guint32 previous_network_state = 0; // NM_STATE_UNKNOWM
 
