@@ -43,7 +43,7 @@
  * signed integer. This running total accumulates across boots and excludes time
  * the computer spends suspended.
  */
-# define SHUTDOWN "ae391c82-1937-4ae5-8539-8d1aceed037d"
+#define SHUTDOWN "ae391c82-1937-4ae5-8539-8d1aceed037d"
 
 #define UPTIME_KEY "uptime"
 
