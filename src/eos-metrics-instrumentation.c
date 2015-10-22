@@ -371,7 +371,7 @@ get_user_id (const gchar *session_path,
 
     if (dbus_proxy == NULL)
       {
-        g_warning ("Error creating GDBusProxy: %s\n", error->message);
+        g_warning ("Error creating GDBusProxy: %s.", error->message);
         g_error_free (error);
         return FALSE;
       }
@@ -389,7 +389,7 @@ get_user_id (const gchar *session_path,
 
     if (user_result == NULL)
       {
-        g_warning ("Error getting user ID: %s\n", error->message);
+        g_warning ("Error getting user ID: %s.", error->message);
         g_error_free (error);
         return FALSE;
       }
@@ -634,7 +634,7 @@ network_dbus_proxy_new (void)
                                      &error);
     if (dbus_proxy == NULL)
       {
-        g_warning ("Error creating GDBusProxy: %s\n", error->message);
+        g_warning ("Error creating GDBusProxy: %s.", error->message);
         g_error_free (error);
       }
     else
