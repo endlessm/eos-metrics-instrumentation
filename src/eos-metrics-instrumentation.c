@@ -37,15 +37,29 @@
 #define STARTUP_FINISHED "bf7e8aed-2932-455c-a28e-d407cfd5aaba"
 
 /*
- * Recorded when eos-metrics-instrumentation receives the SIGTERM signal, which
- * should generally correspond to system shutdown. The auxiliary payload
- * contains a running total of the system uptime in nanoseconds as a 64-bit
- * signed integer. This running total accumulates across boots and excludes time
- * the computer spends suspended.
+ * Recorded half an hour after the system starts up and then hourly after that.
+ * The auxiliary payload is a 2-tuple of the form (uptime_tally, boot_count).
+ * uptime_tally is a running total of the system uptime in nanoseconds as a
+ * 64-bit signed integer. This running total accumulates across boots and
+ * excludes time the computer spends suspended. boot_count is a 64-bit signed
+ * integer indicating the 0-based count of the current boot.
  */
-#define SHUTDOWN_EVENT "ae391c82-1937-4ae5-8539-8d1aceed037d"
+#define UPTIME_EVENT "005096c4-9444-48c6-844b-6cb693c15235"
+
+/*
+ * Recorded when eos-metrics-instrumentation receives the SIGTERM signal, which
+ * should generally correspond to system shutdown. The auxiliary payload is the
+ * same as that of the uptime event.
+ */
+#define SHUTDOWN_EVENT "91de63ea-c7b7-412c-93f3-6f3d9b2f864c"
 
 #define UPTIME_KEY "uptime"
+#define BOOT_COUNT_KEY "boot_count"
+
+/* This is the period in seconds with which we record the total system uptime
+ * across all boots.
+ */
+#define RECORD_UPTIME_INTERVAL (60u * 60u)
 
 /*
  * Started when a user logs in and stopped when that user logs out.
@@ -78,9 +92,12 @@
 #define PERSONALITY_CONFIG_GROUP "Personality"
 #define PERSONALITY_KEY "PersonalityName"
 
-static gboolean start_time_set = FALSE;
-static gint64 start_time;
-static EinsPersistentTally *persistent_tally;
+static gboolean prev_time_set = FALSE;
+static gint64 prev_time;
+static EinsPersistentTally *uptime_tally;
+
+static gint64 boot_count = -1;
+static EinsPersistentTally *boot_count_tally;
 
 static GData *humanity_by_session_id;
 
@@ -245,62 +262,113 @@ record_startup (GDBusProxy *dbus_proxy,
      }
 }
 
-/* Set the global variable start_time to the current time. */
+/* Set the global variable prev_time to the current time. */
 static void
-set_start_time (void)
+set_prev_time (void)
 {
-    start_time_set = emtr_util_get_current_time (CLOCK_MONOTONIC, &start_time);
+    prev_time_set = emtr_util_get_current_time (CLOCK_MONOTONIC, &prev_time);
 
     const gchar *tally_file_override = g_getenv ("EOS_INSTRUMENTATION_CACHE");
     if (tally_file_override != NULL)
-      persistent_tally = eins_persistent_tally_new_full (tally_file_override,
-                                                         UPTIME_KEY);
+      uptime_tally =
+        eins_persistent_tally_new_full (tally_file_override, UPTIME_KEY);
     else
-      persistent_tally = eins_persistent_tally_new (UPTIME_KEY);
+      uptime_tally = eins_persistent_tally_new (UPTIME_KEY);
 
-    if (!start_time_set)
+    if (!prev_time_set)
       return;
 
     /* Cache contents of persistent tally. */
-    start_time_set = eins_persistent_tally_get_tally (persistent_tally, NULL);
+    prev_time_set = eins_persistent_tally_get_tally (uptime_tally, NULL);
 }
 
-/*
- * Record a system shutdown event. Compute the length of time the system has
- * been on but not suspended using the global variable start_time. Add that time
- * to the running tally that spans across boots and report the tally as the
+static gboolean
+set_boot_count (gpointer unused)
+{
+    const gchar *tally_file_override = g_getenv ("EOS_INSTRUMENTATION_CACHE");
+    if (tally_file_override != NULL)
+      boot_count_tally =
+        eins_persistent_tally_new_full (tally_file_override, BOOT_COUNT_KEY);
+    else
+      boot_count_tally = eins_persistent_tally_new (BOOT_COUNT_KEY);
+
+    gboolean add_succeeded =
+      eins_persistent_tally_add_to_tally (boot_count_tally, 1);
+    if (!add_succeeded)
+      return G_SOURCE_REMOVE;
+
+    eins_persistent_tally_get_tally (boot_count_tally, &boot_count);
+    return G_SOURCE_REMOVE;
+}
+
+/* Returns an auxiliary payload that is a 2-tuple of the form
+ * (uptime_tally, boot_count). uptime_tally is the running total uptime across
+ * all boots in nanoseconds as a 64-bit signed integer. boot_count is the
+ * 0-based count associated with the current boot as a 64-bit signed integer.
+ * Returns NULL on error. Sets the global variable prev_time to the current
+ * time. Adds the time elapsed since prev_time to the running uptime tally that
+ * spans boots.
+ */
+static GVariant *
+make_uptime_payload (void)
+{
+    gint64 current_time;
+    gboolean got_current_time =
+      emtr_util_get_current_time (CLOCK_MONOTONIC, &current_time);
+
+    if (!got_current_time || !prev_time_set)
+      return NULL;
+
+    gint64 time_elapsed = current_time - prev_time;
+    gboolean add_succeeded =
+      eins_persistent_tally_add_to_tally (uptime_tally, time_elapsed);
+
+    if (!add_succeeded)
+      return NULL;
+
+    prev_time = current_time;
+
+    if (boot_count == -1)
+      return NULL;
+
+    gint64 total_uptime;
+    gboolean got_uptime =
+      eins_persistent_tally_get_tally (uptime_tally, &total_uptime);
+
+    if (!got_uptime)
+      return NULL;
+
+    return g_variant_new ("(xx)", total_uptime, boot_count);
+}
+
+/* Intended for use as a GSourceFunc callback. Records an uptime event. Reports
+ * the running uptime tally that spans across boots and the boot count as the
  * auxiliary payload of the system shutdown event.
+ */
+static gboolean
+record_uptime (gpointer unused)
+{
+    GVariant *uptime_payload = make_uptime_payload ();
+    emtr_event_recorder_record_event (emtr_event_recorder_get_default (),
+                                      UPTIME_EVENT, uptime_payload);
+    g_timeout_add_seconds (RECORD_UPTIME_INTERVAL, (GSourceFunc) record_uptime,
+                           NULL);
+    return G_SOURCE_REMOVE;
+}
+
+/* Records a system shutdown event. Reports the running uptime tally that spans
+ * across boots and the boot count as the auxiliary payload of the system
+ * shutdown event.
  */
 static void
 record_shutdown (void)
 {
-    gint64 shutdown_time;
-    gboolean got_shutdown_time =
-      emtr_util_get_current_time (CLOCK_MONOTONIC, &shutdown_time);
-
-    if (!got_shutdown_time || !start_time_set)
-      return;
-
-    gint64 curr_boot_uptime = shutdown_time - start_time;
-    gboolean add_succeeded =
-      eins_persistent_tally_add_to_tally (persistent_tally, curr_boot_uptime);
-
-    if (!add_succeeded)
-      return;
-
-    gint64 uptime_tally;
-    gboolean get_succeeded =
-      eins_persistent_tally_get_tally (persistent_tally, &uptime_tally);
-
-    if (!get_succeeded)
-      return;
-
-    GVariant *uptime_tally_variant = g_variant_new_int64 (uptime_tally);
+    GVariant *uptime_payload = make_uptime_payload ();
     emtr_event_recorder_record_event_sync (emtr_event_recorder_get_default (),
-                                           SHUTDOWN_EVENT,
-                                           uptime_tally_variant);
+                                           SHUTDOWN_EVENT, uptime_payload);
 
-    g_object_unref (persistent_tally);
+    g_object_unref (uptime_tally);
+    g_object_unref (boot_count_tally);
 }
 
 /*
@@ -657,7 +725,7 @@ gint
 main (gint                argc,
       const gchar * const argv[])
 {
-    set_start_time ();
+    set_prev_time ();
     g_datalist_init (&humanity_by_session_id);
 
     GDBusProxy *systemd_dbus_proxy = systemd_dbus_proxy_new ();
@@ -668,6 +736,9 @@ main (gint                argc,
 
     g_idle_add ((GSourceFunc) record_location_metric, NULL);
     g_idle_add ((GSourceFunc) record_os_version, NULL);
+    g_idle_add ((GSourceFunc) set_boot_count, NULL);
+    g_timeout_add_seconds (RECORD_UPTIME_INTERVAL / 2,
+                           (GSourceFunc) record_uptime, NULL);
 
     g_unix_signal_add (SIGHUP, (GSourceFunc) quit_main_loop, main_loop);
     g_unix_signal_add (SIGINT, (GSourceFunc) quit_main_loop, main_loop);
