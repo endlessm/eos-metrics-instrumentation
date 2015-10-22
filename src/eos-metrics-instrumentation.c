@@ -652,9 +652,9 @@ quit_main_loop (GMainLoop *main_loop)
     return G_SOURCE_REMOVE;
 }
 
-int
-main(int                argc,
-     const char * const argv[])
+gint
+main (gint                argc,
+      const gchar * const argv[])
 {
     set_start_time ();
     g_datalist_init (&humanity_by_session_id);
