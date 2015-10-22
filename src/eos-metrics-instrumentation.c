@@ -86,7 +86,7 @@ static gint64 start_time;
 
 static EinsPersistentTally *persistent_tally;
 
-static volatile guint32 previous_network_state = 0; // NM_STATE_UNKNOWM
+static guint32 previous_network_state = 0; // NM_STATE_UNKNOWM
 
 static gboolean
 get_os_version (gchar **name_out,
