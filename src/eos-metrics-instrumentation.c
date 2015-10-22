@@ -186,14 +186,14 @@ get_eos_personality (void)
     return (personality != NULL) ? personality : g_strdup ("");
 }
 
-static void
-record_os_version (void)
+static gboolean
+record_os_version (gpointer unused)
 {
     gchar *os_name = NULL;
     gchar *os_version = NULL;
 
     if (!get_os_version (&os_name, &os_version))
-      return;
+      return G_SOURCE_REMOVE;
 
     gchar *eos_personality = get_eos_personality ();
 
@@ -205,6 +205,8 @@ record_os_version (void)
     g_free (os_name);
     g_free (os_version);
     g_free (eos_personality);
+
+    return G_SOURCE_REMOVE;
 }
 
 /*
@@ -662,15 +664,15 @@ main (gint                argc,
     GDBusProxy *network_dbus_proxy = network_dbus_proxy_new ();
 
     GMainLoop *main_loop = g_main_loop_new (NULL, TRUE);
+
     g_idle_add ((GSourceFunc) record_location_metric, NULL);
+    g_idle_add ((GSourceFunc) record_os_version, NULL);
 
     g_unix_signal_add (SIGHUP, (GSourceFunc) quit_main_loop, main_loop);
     g_unix_signal_add (SIGINT, (GSourceFunc) quit_main_loop, main_loop);
     g_unix_signal_add (SIGTERM, (GSourceFunc) quit_main_loop, main_loop);
     g_unix_signal_add (SIGUSR1, (GSourceFunc) quit_main_loop, main_loop);
     g_unix_signal_add (SIGUSR2, (GSourceFunc) quit_main_loop, main_loop);
-
-    record_os_version ();
 
     g_main_loop_run (main_loop);
 
