@@ -252,7 +252,7 @@ set_start_time (void)
     start_time_set = emtr_util_get_current_time (CLOCK_MONOTONIC, &start_time);
 
     const gchar *tally_file_override = g_getenv ("EOS_INSTRUMENTATION_CACHE");
-    if (tally_file_override)
+    if (tally_file_override != NULL)
       persistent_tally = eins_persistent_tally_new_full (tally_file_override,
                                                          UPTIME_KEY);
     else
