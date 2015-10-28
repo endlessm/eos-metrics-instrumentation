@@ -42,7 +42,7 @@
  * uptime_tally is a running total of the system uptime in nanoseconds as a
  * 64-bit signed integer. This running total accumulates across boots and
  * excludes time the computer spends suspended. boot_count is a 64-bit signed
- * integer indicating the 0-based count of the current boot.
+ * integer indicating the 1-based count of the current boot.
  */
 #define UPTIME_EVENT "005096c4-9444-48c6-844b-6cb693c15235"
 
@@ -304,7 +304,7 @@ set_boot_count (gpointer unused)
 /* Returns an auxiliary payload that is a 2-tuple of the form
  * (uptime_tally, boot_count). uptime_tally is the running total uptime across
  * all boots in nanoseconds as a 64-bit signed integer. boot_count is the
- * 0-based count associated with the current boot as a 64-bit signed integer.
+ * 1-based count associated with the current boot as a 64-bit signed integer.
  * Returns NULL on error. Sets the global variable prev_time to the current
  * time. Adds the time elapsed since prev_time to the running uptime tally that
  * spans boots.
