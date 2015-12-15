@@ -26,8 +26,10 @@
 #define FILE_PATH "test_persistent_tally_XXXXXX"
 #define GROUP "tallies"
 #define KEY "test"
+#define KEY_2 "test_two"
 #define STARTING_TALLY 18
 #define DELTA -3
+#define DELTA_2 8
 #define STARTING_KEY_FILE \
   "[" GROUP "]\n" \
   KEY "=18\n"
@@ -82,7 +84,8 @@ setup (Fixture      *fixture,
   write_key_file (fixture, STARTING_KEY_FILE);
 
   fixture->persistent_tally =
-    eins_persistent_tally_new_full (fixture->tmp_path, KEY);
+    eins_persistent_tally_new_full (fixture->tmp_path, &error);
+  g_assert_no_error (error);
 }
 
 static void
@@ -109,41 +112,25 @@ test_persistent_tally_can_get_tally (Fixture      *fixture,
 {
   gint64 tally;
   gboolean read_succeeded =
-    eins_persistent_tally_get_tally (fixture->persistent_tally, &tally);
+    eins_persistent_tally_get_tally (fixture->persistent_tally, KEY, &tally);
   g_assert_true (read_succeeded);
   g_assert_cmpint (tally, ==, STARTING_TALLY);
-}
-
-static void
-test_persistent_tally_get_ignores_null (Fixture      *fixture,
-                                        gconstpointer unused)
-{
-  gboolean read_succeeded =
-    eins_persistent_tally_get_tally (fixture->persistent_tally, NULL);
-  g_assert_true (read_succeeded);
 }
 
 static void
 test_persistent_tally_caches_tally (Fixture      *fixture,
                                     gconstpointer unused)
 {
-  /* The first get should cache the value in memory. */
-  gint64 first_tally;
-  gboolean first_read_succeeded =
-    eins_persistent_tally_get_tally (fixture->persistent_tally, &first_tally);
-  g_assert_true (first_read_succeeded);
-  g_assert_cmpint (first_tally, ==, STARTING_TALLY);
-
-  /* This key_file should now be ignored by the provider. */
+  /* This key_file should be ignored by the provider. */
   write_key_file (fixture, OTHER_KEY_FILE);
 
-  gint64 second_tally;
-  gboolean second_read_succeeded =
-    eins_persistent_tally_get_tally (fixture->persistent_tally, &second_tally);
-  g_assert_true (second_read_succeeded);
+  gint64 tally;
+  gboolean read_succeeded =
+    eins_persistent_tally_get_tally (fixture->persistent_tally, KEY, &tally);
+  g_assert_true (read_succeeded);
 
   /* The tally should not have changed. */
-  g_assert_cmpint (second_tally, ==, STARTING_TALLY);
+  g_assert_cmpint (tally, ==, STARTING_TALLY);
 }
 
 static void
@@ -151,12 +138,13 @@ test_persistent_tally_can_add_to_tally (Fixture      *fixture,
                                         gconstpointer unused)
 {
   gboolean write_succeeded =
-    eins_persistent_tally_add_to_tally (fixture->persistent_tally, DELTA);
+    eins_persistent_tally_add_to_tally (fixture->persistent_tally, KEY,
+                                        DELTA);
   g_assert_true (write_succeeded);
 
   gint64 tally;
   gboolean read_succeeded =
-    eins_persistent_tally_get_tally (fixture->persistent_tally, &tally);
+    eins_persistent_tally_get_tally (fixture->persistent_tally, KEY, &tally);
   g_assert_true (read_succeeded);
   g_assert_cmpint (tally, ==, (STARTING_TALLY + DELTA));
 }
@@ -165,11 +153,17 @@ static void
 test_persistent_tally_resets_when_no_file (Fixture      *fixture,
                                            gconstpointer unused)
 {
+  g_object_unref (fixture->persistent_tally);
   g_assert_cmpint (g_unlink (fixture->tmp_path), ==, 0);
+
+  GError *error = NULL;
+  fixture->persistent_tally =
+    eins_persistent_tally_new_full (fixture->tmp_path, &error);
+  g_assert_no_error (error);
 
   gint64 tally = -1;
   gboolean read_succeeded =
-    eins_persistent_tally_get_tally (fixture->persistent_tally, &tally);
+    eins_persistent_tally_get_tally (fixture->persistent_tally, KEY, &tally);
 
   g_assert_true (read_succeeded);
 
@@ -180,18 +174,45 @@ static void
 test_persistent_tally_aborts_when_corrupted (Fixture      *fixture,
                                              gconstpointer unused)
 {
+  g_object_unref (fixture->persistent_tally);
   write_key_file (fixture, CORRUPTED_KEY_FILE);
 
+  GError *error = NULL;
+  fixture->persistent_tally =
+    eins_persistent_tally_new_full (fixture->tmp_path, &error);
+  g_assert_no_error (error);
+
   g_test_expect_message (G_LOG_DOMAIN, G_LOG_LEVEL_WARNING,
-                         "Failed to read from file. Error: *");
-
-  gint64 tally = -1;
+                         "Could not get tally for key " KEY ". Error: *");
+  gint64 tally;
   gboolean read_succeeded =
-    eins_persistent_tally_get_tally (fixture->persistent_tally, &tally);
-
+    eins_persistent_tally_get_tally (fixture->persistent_tally, KEY, &tally);
   g_test_assert_expected_messages ();
   g_assert_false (read_succeeded);
-  g_assert_cmpint (tally, ==, -1);
+  g_assert_cmpint (tally, ==, 0);
+}
+
+static void
+test_persistent_tally_handles_multiple_keys (Fixture      *fixture,
+                                             gconstpointer unused)
+{
+  gboolean write_succeeded =
+    eins_persistent_tally_add_to_tally (fixture->persistent_tally, KEY_2, DELTA_2);
+  g_assert_true (write_succeeded);
+
+  gint64 tally_one;
+  gboolean read_one_succeeded =
+    eins_persistent_tally_get_tally (fixture->persistent_tally, KEY,
+                                     &tally_one);
+  g_assert_true (read_one_succeeded);
+  g_assert_cmpint (tally_one, ==, STARTING_TALLY);
+
+  gint64 tally_two;
+  gboolean read_two_succeeded =
+    eins_persistent_tally_get_tally (fixture->persistent_tally, KEY_2,
+                                     &tally_two);
+  g_assert_true (read_two_succeeded);
+  g_assert_cmpint (tally_two, ==, DELTA_2);
 }
 
 gint
@@ -206,8 +227,6 @@ main (gint                argc,
                                   test_persistent_tally_new_succeeds);
   ADD_PERSISTENT_TALLY_TEST_FUNC ("/persistent-tally/can-get-tally",
                                   test_persistent_tally_can_get_tally);
-  ADD_PERSISTENT_TALLY_TEST_FUNC ("/persistent-tally/get-ignores-null",
-                                  test_persistent_tally_get_ignores_null);
   ADD_PERSISTENT_TALLY_TEST_FUNC ("/persistent-tally/caches-tally",
                                   test_persistent_tally_caches_tally);
   ADD_PERSISTENT_TALLY_TEST_FUNC ("/persistent-tally/can-add-to-tally",
@@ -216,6 +235,8 @@ main (gint                argc,
                                   test_persistent_tally_resets_when_no_file);
   ADD_PERSISTENT_TALLY_TEST_FUNC ("/persistent-tally/aborts-when-corrupted",
                                   test_persistent_tally_aborts_when_corrupted);
+  ADD_PERSISTENT_TALLY_TEST_FUNC ("/persistent-tally/handles-multiple-keys",
+                                  test_persistent_tally_handles_multiple_keys);
 
 #undef ADD_PERSISTENT_TALLY_TEST_FUNC
 
