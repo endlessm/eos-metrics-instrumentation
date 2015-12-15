@@ -118,6 +118,7 @@ eins_persistent_tally_init (EinsPersistentTally *self)
 {
   EinsPersistentTallyPrivate *priv =
     eins_persistent_tally_get_instance_private (self);
+
   priv->key_file = g_key_file_new ();
 }
 
@@ -171,6 +172,7 @@ write_tally (EinsPersistentTally *self,
     }
 
   g_key_file_set_int64 (priv->key_file, GROUP, priv->key, tally);
+
   GError *error = NULL;
   if (!g_key_file_save_to_file (priv->key_file, priv->file_path, &error))
     {
