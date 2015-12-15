@@ -189,11 +189,9 @@ test_persistent_tally_aborts_when_corrupted (Fixture      *fixture,
   gboolean read_succeeded =
     eins_persistent_tally_get_tally (fixture->persistent_tally, &tally);
 
-  g_assert_false (read_succeeded);
-
-  g_assert_cmpint (tally, ==, -1);
-
   g_test_assert_expected_messages ();
+  g_assert_false (read_succeeded);
+  g_assert_cmpint (tally, ==, -1);
 }
 
 gint
