@@ -44,14 +44,14 @@
  * excludes time the computer spends suspended. boot_count is a 64-bit signed
  * integer indicating the 1-based count of the current boot.
  */
-#define UPTIME_EVENT "005096c4-9444-48c6-844b-6cb693c15235"
+#define UPTIME_EVENT "9af2cc74-d6dd-423f-ac44-600a6eee2d96"
 
 /*
  * Recorded when eos-metrics-instrumentation receives the SIGTERM signal, which
  * should generally correspond to system shutdown. The auxiliary payload is the
  * same as that of the uptime event.
  */
-#define SHUTDOWN_EVENT "91de63ea-c7b7-412c-93f3-6f3d9b2f864c"
+#define SHUTDOWN_EVENT "8f70276e-3f78-45b2-99f8-94db231d42dd"
 
 #define UPTIME_KEY "uptime"
 #define BOOT_COUNT_KEY "boot_count"
@@ -94,10 +94,7 @@
 
 static gboolean prev_time_set = FALSE;
 static gint64 prev_time;
-static EinsPersistentTally *uptime_tally;
-
-static gint64 boot_count = -1;
-static EinsPersistentTally *boot_count_tally;
+static EinsPersistentTally *persistent_tally;
 
 static GData *humanity_by_session_id;
 
@@ -262,42 +259,26 @@ record_startup (GDBusProxy *dbus_proxy,
      }
 }
 
-/* Set the global variable prev_time to the current time. */
-static void
-set_prev_time (void)
-{
-    prev_time_set = emtr_util_get_current_time (CLOCK_MONOTONIC, &prev_time);
-
-    const gchar *tally_file_override = g_getenv ("EOS_INSTRUMENTATION_CACHE");
-    if (tally_file_override != NULL)
-      uptime_tally =
-        eins_persistent_tally_new_full (tally_file_override, UPTIME_KEY);
-    else
-      uptime_tally = eins_persistent_tally_new (UPTIME_KEY);
-
-    if (!prev_time_set)
-      return;
-
-    /* Cache contents of persistent tally. */
-    prev_time_set = eins_persistent_tally_get_tally (uptime_tally, NULL);
-}
-
 static gboolean
-set_boot_count (gpointer unused)
+increment_boot_count (gpointer unused)
 {
     const gchar *tally_file_override = g_getenv ("EOS_INSTRUMENTATION_CACHE");
+    GError *error = NULL;
     if (tally_file_override != NULL)
-      boot_count_tally =
-        eins_persistent_tally_new_full (tally_file_override, BOOT_COUNT_KEY);
+      persistent_tally =
+        eins_persistent_tally_new_full (tally_file_override, &error);
     else
-      boot_count_tally = eins_persistent_tally_new (BOOT_COUNT_KEY);
+      persistent_tally = eins_persistent_tally_new (&error);
 
-    gboolean add_succeeded =
-      eins_persistent_tally_add_to_tally (boot_count_tally, 1);
-    if (!add_succeeded)
-      return G_SOURCE_REMOVE;
+    if (persistent_tally == NULL)
+      {
+        g_warning ("Could not create persistent tally object: %s.",
+                   error->message);
+        g_error_free (error);
+        return G_SOURCE_REMOVE;
+      }
 
-    eins_persistent_tally_get_tally (boot_count_tally, &boot_count);
+    eins_persistent_tally_add_to_tally (persistent_tally, BOOT_COUNT_KEY, 1);
     return G_SOURCE_REMOVE;
 }
 
@@ -316,26 +297,33 @@ make_uptime_payload (void)
     gboolean got_current_time =
       emtr_util_get_current_time (CLOCK_MONOTONIC, &current_time);
 
-    if (!got_current_time || !prev_time_set)
+    if (!got_current_time || !prev_time_set || persistent_tally == NULL)
       return NULL;
 
     gint64 time_elapsed = current_time - prev_time;
     gboolean add_succeeded =
-      eins_persistent_tally_add_to_tally (uptime_tally, time_elapsed);
+      eins_persistent_tally_add_to_tally (persistent_tally, UPTIME_KEY,
+                                          time_elapsed);
 
     if (!add_succeeded)
       return NULL;
 
     prev_time = current_time;
 
-    if (boot_count == -1)
-      return NULL;
-
     gint64 total_uptime;
     gboolean got_uptime =
-      eins_persistent_tally_get_tally (uptime_tally, &total_uptime);
+      eins_persistent_tally_get_tally (persistent_tally, UPTIME_KEY,
+                                       &total_uptime);
 
     if (!got_uptime)
+      return NULL;
+
+    gint64 boot_count;
+    gboolean got_boot_count =
+      eins_persistent_tally_get_tally (persistent_tally, BOOT_COUNT_KEY,
+                                       &boot_count);
+
+    if (!got_boot_count)
       return NULL;
 
     return g_variant_new ("(xx)", total_uptime, boot_count);
@@ -367,8 +355,7 @@ record_shutdown (void)
     emtr_event_recorder_record_event_sync (emtr_event_recorder_get_default (),
                                            SHUTDOWN_EVENT, uptime_payload);
 
-    g_object_unref (uptime_tally);
-    g_object_unref (boot_count_tally);
+    g_object_unref (persistent_tally);
 }
 
 /*
@@ -725,7 +712,7 @@ gint
 main (gint                argc,
       const gchar * const argv[])
 {
-    set_prev_time ();
+    prev_time_set = emtr_util_get_current_time (CLOCK_MONOTONIC, &prev_time);
     g_datalist_init (&humanity_by_session_id);
 
     GDBusProxy *systemd_dbus_proxy = systemd_dbus_proxy_new ();
@@ -736,7 +723,7 @@ main (gint                argc,
 
     g_idle_add ((GSourceFunc) record_location_metric, NULL);
     g_idle_add ((GSourceFunc) record_os_version, NULL);
-    g_idle_add ((GSourceFunc) set_boot_count, NULL);
+    g_idle_add ((GSourceFunc) increment_boot_count, NULL);
     g_timeout_add_seconds (RECORD_UPTIME_INTERVAL / 2,
                            (GSourceFunc) record_uptime, NULL);
 

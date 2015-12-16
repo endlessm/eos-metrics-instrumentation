@@ -47,15 +47,17 @@ struct _EinsPersistentTallyClass
 
 GType                eins_persistent_tally_get_type     (void) G_GNUC_CONST;
 
-EinsPersistentTally *eins_persistent_tally_new          (const gchar         *key);
+EinsPersistentTally *eins_persistent_tally_new          (GError             **error);
 
 EinsPersistentTally *eins_persistent_tally_new_full     (const gchar         *file_path,
-                                                         const gchar         *key);
+                                                         GError             **error);
 
 gboolean             eins_persistent_tally_get_tally    (EinsPersistentTally *self,
+                                                         const gchar         *key,
                                                          gint64              *tally);
 
 gboolean             eins_persistent_tally_add_to_tally (EinsPersistentTally *self,
+                                                         const gchar         *key,
                                                          gint64               delta);
 
 G_END_DECLS
