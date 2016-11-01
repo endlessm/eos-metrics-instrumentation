@@ -92,6 +92,18 @@
 #define PERSONALITY_CONFIG_GROUP "Personality"
 #define PERSONALITY_KEY "PersonalityName"
 
+/*
+ * Recorded once at startup when booted from a combined live + installer USB
+ * stick. We expect metrics reported from live sessions to be different to those
+ * from installed versions of the OS, not least because live sessions are
+ * transient, so each boot will appear to be a new installation, booted for the
+ * first time. There is no payload.
+ */
+#define LIVE_BOOT_EVENT "56be0b38-e47b-4578-9599-00ff9bda54bb"
+
+#define KERNEL_CMDLINE_PATH "/proc/cmdline"
+#define LIVE_BOOT_FLAG_REGEX "\\bendless\\.live_boot\\b"
+
 static gboolean prev_time_set = FALSE;
 static gint64 prev_time;
 static EinsPersistentTally *persistent_tally;
@@ -219,6 +231,32 @@ record_os_version (gpointer unused)
     g_free (os_name);
     g_free (os_version);
     g_free (eos_personality);
+
+    return G_SOURCE_REMOVE;
+}
+
+static gboolean
+is_live_boot (void)
+{
+  g_autofree gchar *cmdline = NULL;
+  g_autoptr(GError) error = NULL;
+
+  if (!g_file_get_contents (KERNEL_CMDLINE_PATH, &cmdline, NULL, &error))
+    {
+      g_warning ("Error reading " KERNEL_CMDLINE_PATH ": %s", error->message);
+      g_error_free (error);
+      return FALSE;
+    }
+
+  return g_regex_match_simple (LIVE_BOOT_FLAG_REGEX, cmdline, 0, 0);
+}
+
+static gboolean
+record_live_boot (gpointer unused)
+{
+    if (is_live_boot ())
+      emtr_event_recorder_record_event (emtr_event_recorder_get_default (),
+                                        LIVE_BOOT_EVENT, NULL);
 
     return G_SOURCE_REMOVE;
 }
@@ -724,6 +762,7 @@ main (gint                argc,
     g_idle_add ((GSourceFunc) record_location_metric, NULL);
     g_idle_add ((GSourceFunc) record_os_version, NULL);
     g_idle_add ((GSourceFunc) increment_boot_count, NULL);
+    g_idle_add ((GSourceFunc) record_live_boot, NULL);
     g_timeout_add_seconds (RECORD_UPTIME_INTERVAL / 2,
                            (GSourceFunc) record_uptime, NULL);
 
