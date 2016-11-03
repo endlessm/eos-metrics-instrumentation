@@ -101,8 +101,15 @@
  */
 #define LIVE_BOOT_EVENT "56be0b38-e47b-4578-9599-00ff9bda54bb"
 
+/*
+ * Recorded once at startup on dual-boot installations. This is
+ * mutually-exclusive with LIVE_BOOT_EVENT. There is no payload.
+ */
+#define DUAL_BOOT_EVENT "16cfc671-5525-4a99-9eb9-4f6c074803a9"
+
 #define KERNEL_CMDLINE_PATH "/proc/cmdline"
 #define LIVE_BOOT_FLAG_REGEX "\\bendless\\.live_boot\\b"
+#define DUAL_BOOT_FLAG_REGEX "\\bendless\\.image\\.device\\b"
 
 static gboolean prev_time_set = FALSE;
 static gint64 prev_time;
@@ -235,28 +242,44 @@ record_os_version (gpointer unused)
     return G_SOURCE_REMOVE;
 }
 
-static gboolean
-is_live_boot (void)
+static void
+check_cmdline (gboolean *is_live_boot,
+               gboolean *is_dual_boot)
 {
   g_autofree gchar *cmdline = NULL;
   g_autoptr(GError) error = NULL;
+
+  *is_live_boot = FALSE;
+  *is_dual_boot = FALSE;
 
   if (!g_file_get_contents (KERNEL_CMDLINE_PATH, &cmdline, NULL, &error))
     {
       g_warning ("Error reading " KERNEL_CMDLINE_PATH ": %s", error->message);
       g_error_free (error);
-      return FALSE;
     }
-
-  return g_regex_match_simple (LIVE_BOOT_FLAG_REGEX, cmdline, 0, 0);
+  else if (g_regex_match_simple (LIVE_BOOT_FLAG_REGEX, cmdline, 0, 0))
+    {
+      *is_live_boot = TRUE;
+    }
+  else if (g_regex_match_simple (DUAL_BOOT_FLAG_REGEX, cmdline, 0, 0))
+    {
+      *is_dual_boot = TRUE;
+    }
 }
 
 static gboolean
 record_live_boot (gpointer unused)
 {
-    if (is_live_boot ())
+    gboolean is_live_boot, is_dual_boot;
+
+    check_cmdline (&is_live_boot, &is_dual_boot);
+
+    if (is_live_boot)
       emtr_event_recorder_record_event (emtr_event_recorder_get_default (),
                                         LIVE_BOOT_EVENT, NULL);
+    else if (is_dual_boot)
+      emtr_event_recorder_record_event (emtr_event_recorder_get_default (),
+                                        DUAL_BOOT_EVENT, NULL);
 
     return G_SOURCE_REMOVE;
 }
