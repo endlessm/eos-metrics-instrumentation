@@ -36,7 +36,7 @@ edit = sed \
 	-e 's|@instrumentationcachedir[@]|$(instrumentationcachedir)|g' \
 	$(NULL)
 
-tmpfilesddir = $(libdir)/tmpfiles.d/
+tmpfilesddir = $(prefix)/lib/tmpfiles.d/
 tmpfilesd_DATA = data/eos-metrics-instrumentation.conf
 
 EXTRA_DIST += \
