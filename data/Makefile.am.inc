@@ -19,14 +19,8 @@
 # Defined as systemdsystemunitdir in ../configure.ac.
 systemdsystemunit_DATA = data/eos-metrics-instrumentation.service
 
-data/eos-metrics-instrumentation.service: data/eos-metrics-instrumentation.service.in
+data/eos-metrics-instrumentation.%: data/eos-metrics-instrumentation.%.in
 	$(AM_V_GEN)mkdir -p data && \
-	rm -f $@ $@.tmp && \
-	$(edit) $< >$@.tmp && \
-	mv $@.tmp $@
-
-data/eos-metrics-instrumentation.conf: data/eos-metrics-instrumentation.conf.in
-	$(AM_V_GEN)$(MKDIR_P) data && \
 	rm -f $@ $@.tmp && \
 	$(edit) $< >$@.tmp && \
 	mv $@.tmp $@
