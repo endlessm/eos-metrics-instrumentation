@@ -17,7 +17,9 @@
 ## <http://www.gnu.org/licenses/>.
 
 # Defined as systemdsystemunitdir in ../configure.ac.
-systemdsystemunit_DATA = data/eos-metrics-instrumentation.service
+systemdsystemunit_DATA = \
+	data/eos-metrics-instrumentation.path \
+	data/eos-metrics-instrumentation.service
 
 data/eos-metrics-instrumentation.%: data/eos-metrics-instrumentation.%.in
 	$(AM_V_GEN)mkdir -p data && \
@@ -34,11 +36,13 @@ tmpfilesddir = $(prefix)/lib/tmpfiles.d/
 tmpfilesd_DATA = data/eos-metrics-instrumentation.conf
 
 EXTRA_DIST += \
+	data/eos-metrics-instrumentation.path.in \
 	data/eos-metrics-instrumentation.service.in \
 	data/eos-metrics-instrumentation.conf.in \
 	$(NULL)
 
 CLEANFILES += \
+	data/eos-metrics-instrumentation.path \
 	data/eos-metrics-instrumentation.service \
 	data/eos-metrics-instrumentation.conf \
 	$(NULL)
