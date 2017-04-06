@@ -1,12 +1,10 @@
 [Unit]
-Description=EndlessOS Metrics Instrumentation
+Description=Endless OS Metrics Instrumentation
 Requires=eos-metrics-event-recorder.service
 Wants=geoclue.service
 After=eos-metrics-event-recorder.service
+ConditionDirectoryNotEmpty=/home
 
 [Service]
 Type=simple
 ExecStart=@libexecdir@/eos-metrics-instrumentation
-
-[Install]
-WantedBy=multi-user.target

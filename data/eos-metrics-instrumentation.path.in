@@ -1,0 +1,10 @@
+[Unit]
+Description=Endless OS Metrics Instrumentation trigger
+Wants=geoclue.service
+After=eos-metrics-event-recorder.service
+
+[Path]
+DirectoryNotEmpty=/home
+
+[Install]
+WantedBy=multi-user.target
