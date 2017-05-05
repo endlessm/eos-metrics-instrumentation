@@ -27,6 +27,7 @@
 #include <eosmetrics/eosmetrics.h>
 
 #include "eins-location.h"
+#include "eins-network-id.h"
 #include "eins-persistent-tally.h"
 
 /*
@@ -70,6 +71,16 @@
 #define USER_IS_LOGGED_IN "add052be-7b2a-4959-81a5-a7f45062ee98"
 
 #define MIN_HUMAN_USER_ID 1000
+
+/*
+ * Recorded when we detect a change in the default route after the network
+ * connectivity has changed. The auxiliary payload is a 32-bit unsigned integer
+ * containing a hash of the ethernet MAC address of the gateway, favouring
+ * IPv4 if available, or IPv6 if not. The intention is to provide a value
+ * which is opaque and stable which is the same for every system located
+ * on the same physical network.
+ */
+#define NETWORK_ID_EVENT "38eb48f8-e131-9b57-77c6-35e0590c82fd"
 
 /*
  * Recorded when the network changes from one of the states described at
@@ -133,6 +144,7 @@ static EinsPersistentTally *persistent_tally;
 
 static GData *humanity_by_session_id;
 
+static guint32 previous_network_id = 0;
 static guint32 previous_network_state = 0; // NM_STATE_UNKNOWM
 
 static gboolean
@@ -793,6 +805,34 @@ login_dbus_proxy_new (void)
     return dbus_proxy;
 }
 
+static gboolean
+record_network_id (gpointer force_ptr)
+{
+    gboolean force = GPOINTER_TO_INT (force_ptr);
+    guint32 network_id;
+
+    if (!eins_network_id_get (&network_id))
+      {
+        return G_SOURCE_REMOVE;
+      }
+
+    if (network_id != previous_network_id || force)
+      {
+        g_message ("recording network ID: %8x", network_id);
+
+        emtr_event_recorder_record_event (emtr_event_recorder_get_default (),
+                                          NETWORK_ID_EVENT,
+                                          g_variant_new_uint32 (network_id));
+
+        previous_network_id = network_id;
+      }
+
+    return G_SOURCE_REMOVE;
+}
+
+/* from https://developer.gnome.org/NetworkManager/unstable/nm-dbus-types.html#NMState */
+#define NM_STATE_CONNECTED_SITE 60
+
 static void
 record_network_change (GDBusProxy *dbus_proxy,
                        gchar      *sender_name,
@@ -811,6 +851,12 @@ record_network_change (GDBusProxy *dbus_proxy,
         emtr_event_recorder_record_event (emtr_event_recorder_get_default (),
                                           NETWORK_STATUS_CHANGED_EVENT,
                                           status_change);
+
+        /* schedule recording the network ID provided we have a default route */
+        if (new_network_state >= NM_STATE_CONNECTED_SITE)
+          {
+            g_idle_add ((GSourceFunc) record_network_id, GINT_TO_POINTER (FALSE));
+          }
 
         previous_network_state = new_network_state;
       }
@@ -867,6 +913,7 @@ main (gint                argc,
     g_idle_add ((GSourceFunc) increment_boot_count, NULL);
     g_idle_add ((GSourceFunc) record_live_boot, NULL);
     g_idle_add ((GSourceFunc) record_image_version, NULL);
+    g_idle_add ((GSourceFunc) record_network_id, GINT_TO_POINTER (TRUE));
     g_timeout_add_seconds (RECORD_UPTIME_INTERVAL / 2,
                            (GSourceFunc) record_uptime, NULL);
 
