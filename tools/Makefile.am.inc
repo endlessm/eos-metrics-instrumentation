@@ -30,3 +30,19 @@ eos_network_id_CFLAGS = \
 	$(NULL)
 
 eos_network_id_LDADD = $(EOS_INSTRUMENTATION_LIBS)
+
+nodist_bin_SCRIPTS = eos-label-location
+
+do_edit = sed \
+	-e 's|[@]sysconfdir[@]|$(sysconfdir)|g'
+
+eos-label-location: tools/eos-label-location.in Makefile
+	$(AM_V_GEN) $(do_edit) $< >$@.tmp && mv $@{.tmp,}
+
+EXTRA_DIST = \
+	tools/eos-label-location.in \
+	$(NULL)
+
+CLEANFILES = \
+	eos-label-location \
+	$(NULL)

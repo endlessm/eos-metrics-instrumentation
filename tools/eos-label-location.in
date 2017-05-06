@@ -1,0 +1,94 @@
+#!/usr/bin/python3
+# -*- coding: utf-8 -*-
+#
+# eos-label-location: edit the location label for metrics instrumentation
+#
+# Copyright © 2017 Endless Mobile, Inc.
+# Authors:
+#  Robert McQueen <rob@endlessm.com>
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 2 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301,
+# USA.
+
+import argparse
+import configparser
+
+
+class LabelLocation(object):
+    CONFIG_PATH = '@sysconfdir@/metrics/location.conf'
+    LABEL_SECTION = 'Label'
+    LABEL_KEYS = ['facility', 'city', 'state']
+
+    def __init__(self, config_file):
+        self.config = configparser.ConfigParser()
+        self.config_file = config_file
+
+        try:
+            self.config.read(self.config_file)
+        except Exception:
+            pass
+
+        if self.LABEL_SECTION not in self.config:
+            self.config.add_section(self.LABEL_SECTION)
+
+    def write(self):
+        with open(self.config_file, 'w') as configfile:
+            self.config.write(configfile)
+
+    def reset(self):
+        for k in self.LABEL_KEYS:
+            self.config.remove_option(self.LABEL_SECTION, k)
+
+        self.write()
+
+    def set(self):
+        for k in self.LABEL_KEYS:
+            try:
+                old = self.config[self.LABEL_SECTION][k]
+            except KeyError:
+                old = ''
+
+            prompt = 'Enter {}'.format(k)
+            if old != '':
+                prompt += ' [{}]'.format(old)
+            prompt += ': '
+
+            new = input(prompt)
+
+            if new != '':
+                self.config[self.LABEL_SECTION][k] = new
+            elif old == '':
+                self.config.remove_option(self.LABEL_SECTION, k)
+
+        self.write()
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='Set an optional label for \
+            the location of this computer, which will be sent to the Endless \
+            OS metrics system.')
+    parser.add_argument('-f', '--file', dest='file',
+                        default=LabelLocation.CONFIG_PATH,
+                        help='Select config file (default: {})'.
+                        format(LabelLocation.CONFIG_PATH))
+    parser.add_argument('-r', '--reset', dest='reset', action='store_true',
+                        help="Reset all values (default: set values \
+                        interactively)")
+    args = parser.parse_args()
+
+    ll = LabelLocation(config_file=args.file)
+    if args.reset:
+        ll.reset()
+    else:
+        ll.set()

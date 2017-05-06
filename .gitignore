@@ -1,4 +1,5 @@
 # Build products
+/eos-label-location
 /eos-metrics-instrumentation
 /eos-network-id
 /tests/test-persistent-tally
