@@ -23,6 +23,7 @@ stamp*
 .dirstamp
 *.tar.*
 *.pc
+Makecache
 Makefile
 Makefile.in
 gtk-doc.make
