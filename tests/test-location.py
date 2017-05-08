@@ -131,7 +131,7 @@ class TestLocationIntegration(dbusmock.DBusTestCase):
         self._quit_on_uuid = None
         self._event_args = None
 
-        self.daemon = subprocess.Popen('./eos-metrics-instrumentation')
+        self.daemon = subprocess.Popen('./src/eos-metrics-instrumentation')
 
     def tearDown(self):
         self.dbus_con.remove_signal_receiver(self.handle_dbus_event_received,
