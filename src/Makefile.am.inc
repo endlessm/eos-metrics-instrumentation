@@ -40,6 +40,7 @@ eos_metrics_instrumentation_SOURCES = \
 eos_metrics_instrumentation_CPPFLAGS = \
 	$(EOS_INSTRUMENTATION_CFLAGS) \
 	-DINSTRUMENTATION_CACHE_DIR="\"$(instrumentationcachedir)\"" \
+	-DSYSCONFDIR="\"$(sysconfdir)\"" \
 	$(NULL)
 
 # Libraries to link against
