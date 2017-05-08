@@ -1,5 +1,6 @@
 # Build products
 /eos-metrics-instrumentation
+/eos-network-id
 /tests/test-persistent-tally
 /data/eos-metrics-instrumentation.conf
 /geoclue.[ch]
@@ -22,6 +23,7 @@ stamp*
 .dirstamp
 *.tar.*
 *.pc
+Makecache
 Makefile
 Makefile.in
 gtk-doc.make

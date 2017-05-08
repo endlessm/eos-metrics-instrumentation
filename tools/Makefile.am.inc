@@ -1,4 +1,4 @@
-## Copyright 2014, 2015 Endless Mobile, Inc.
+## Copyright 2014, 2015, 2017 Endless Mobile, Inc.
 
 ## This file is part of eos-metrics-instrumentation.
 ##
@@ -16,31 +16,17 @@
 ## along with eos-metrics-instrumentation.  If not, see
 ## <http://www.gnu.org/licenses/>.
 
-libexec_PROGRAMS = eos-metrics-instrumentation
+bin_PROGRAMS = eos-network-id
 
-geoclue.c: geoclue.h
-geoclue.h: $(GEOCLUE_DBUS_INTERFACE_XML)
-	$(AM_V_GEN)$(GDBUS_CODEGEN) --interface-prefix org.freedesktop.GeoClue2 \
-		--generate-c-code geoclue --c-namespace Geoclue $<
-BUILT_SOURCES += geoclue.c geoclue.h
-
-eos_metrics_instrumentation_SOURCES = \
-	src/eos-metrics-instrumentation.c \
-	src/eins-location.h \
-	src/eins-location.c \
+eos_network_id_SOURCES = \
 	src/eins-network-id.h \
 	src/eins-network-id.c \
-	src/eins-persistent-tally.h \
-	src/eins-persistent-tally.c \
-	geoclue.h \
-	geoclue.c \
+	tools/eos-network-id.c \
 	$(NULL)
 
-# Pre-processor flags
-eos_metrics_instrumentation_CPPFLAGS = \
+eos_network_id_CFLAGS = \
 	$(EOS_INSTRUMENTATION_CFLAGS) \
-	-DINSTRUMENTATION_CACHE_DIR="\"$(instrumentationcachedir)\"" \
+	-I$(top_srcdir)/src \
 	$(NULL)
 
-# Libraries to link against
-eos_metrics_instrumentation_LDADD = $(EOS_INSTRUMENTATION_LIBS)
+eos_network_id_LDADD = $(EOS_INSTRUMENTATION_LIBS)

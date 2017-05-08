@@ -72,3 +72,6 @@ include $(top_srcdir)/data/Makefile.am.inc
 
 # Tests
 include $(top_srcdir)/tests/Makefile.am.inc
+
+# Tools
+include $(top_srcdir)/tools/Makefile.am.inc
