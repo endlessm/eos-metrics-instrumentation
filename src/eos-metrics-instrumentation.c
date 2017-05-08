@@ -910,7 +910,7 @@ record_network_id (gpointer force_ptr)
 
     if (network_id != previous_network_id || force)
       {
-        g_message ("recording network ID: %8x", network_id);
+        g_message ("Recording network ID: %8x", network_id);
 
         emtr_event_recorder_record_event (emtr_event_recorder_get_default (),
                                           NETWORK_ID_EVENT,
