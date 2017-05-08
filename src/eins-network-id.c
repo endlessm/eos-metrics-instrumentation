@@ -256,7 +256,7 @@ eins_network_id_get (guint32 *id)
     }
 
   g_autoptr(GChecksum) checksum = g_checksum_new (G_CHECKSUM_SHA512);
-  g_checksum_update (checksum, hwaddr, -1);
+  g_checksum_update (checksum, (guint8 *) hwaddr, -1);
   guint32 bytes[16];
   gsize len = sizeof(bytes);
   g_checksum_get_digest (checksum, (guint8 *) &bytes, &len);
