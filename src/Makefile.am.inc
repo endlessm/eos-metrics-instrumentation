@@ -16,15 +16,15 @@
 ## along with eos-metrics-instrumentation.  If not, see
 ## <http://www.gnu.org/licenses/>.
 
-libexec_PROGRAMS = eos-metrics-instrumentation
+libexec_PROGRAMS = src/eos-metrics-instrumentation
 
-geoclue.c: geoclue.h
-geoclue.h: $(GEOCLUE_DBUS_INTERFACE_XML)
+src/geoclue.c: src/geoclue.h
+src/geoclue.h: $(GEOCLUE_DBUS_INTERFACE_XML)
 	$(AM_V_GEN)$(GDBUS_CODEGEN) --interface-prefix org.freedesktop.GeoClue2 \
-		--generate-c-code geoclue --c-namespace Geoclue $<
-BUILT_SOURCES += geoclue.c geoclue.h
+		--generate-c-code src/geoclue --c-namespace Geoclue $<
+BUILT_SOURCES += src/geoclue.c src/geoclue.h
 
-eos_metrics_instrumentation_SOURCES = \
+src_eos_metrics_instrumentation_SOURCES = \
 	src/eos-metrics-instrumentation.c \
 	src/eins-location.h \
 	src/eins-location.c \
@@ -32,15 +32,16 @@ eos_metrics_instrumentation_SOURCES = \
 	src/eins-network-id.c \
 	src/eins-persistent-tally.h \
 	src/eins-persistent-tally.c \
-	geoclue.h \
-	geoclue.c \
+	src/geoclue.h \
+	src/geoclue.c \
 	$(NULL)
 
 # Pre-processor flags
-eos_metrics_instrumentation_CPPFLAGS = \
+src_eos_metrics_instrumentation_CPPFLAGS = \
 	$(EOS_INSTRUMENTATION_CFLAGS) \
 	-DINSTRUMENTATION_CACHE_DIR="\"$(instrumentationcachedir)\"" \
+	-DSYSCONFDIR="\"$(sysconfdir)\"" \
 	$(NULL)
 
 # Libraries to link against
-eos_metrics_instrumentation_LDADD = $(EOS_INSTRUMENTATION_LIBS)
+src_eos_metrics_instrumentation_LDADD = $(EOS_INSTRUMENTATION_LIBS)

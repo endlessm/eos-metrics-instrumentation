@@ -44,6 +44,10 @@ endif EOS_ENABLE_COVERAGE
 # Generated files that 'make clean' should erase
 CLEANFILES =
 DISTCLEANFILES =
+MAINTAINERCLEANFILES = \
+        $(GITIGNORE_MAINTAINERCLEANFILES_TOPLEVEL) \
+        $(GITIGNORE_MAINTAINERCLEANFILES_MAKEFILE_IN) \
+        $(NULL)
 
 # Binaries that should be produced but not installed.
 noinst_PROGRAMS =
@@ -75,3 +79,6 @@ include $(top_srcdir)/tests/Makefile.am.inc
 
 # Tools
 include $(top_srcdir)/tools/Makefile.am.inc
+
+# Automatic .gitignore
+-include $(top_srcdir)/git.mk
