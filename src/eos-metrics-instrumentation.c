@@ -105,14 +105,12 @@
 
 /* Recorded at every startup to track deployment statistics. The auxiliary
  * payload is a 3-tuple of the form (os_name, os_version, eos_personality).
+ * From 3.2.0 the personality is always reported as "" because the image
+ * version event can be used.
  */
 #define OS_VERSION_EVENT "1fa16a31-9225-467e-8502-e31806e9b4eb"
 
 #define OS_RELEASE_FILE "/etc/os-release"
-
-#define PERSONALITY_FILE_PATH "/etc/EndlessOS/personality.conf"
-#define PERSONALITY_CONFIG_GROUP "Personality"
-#define PERSONALITY_KEY "PersonalityName"
 
 /*
  * Recorded once at startup when booted from a combined live + installer USB
@@ -227,36 +225,6 @@ get_os_version (gchar **name_out,
     return succeeded;
 }
 
-static gchar *
-get_eos_personality (void)
-{
-    gchar *personality = NULL;
-    GKeyFile *key_file = g_key_file_new ();
-
-    /* We ignore errors here since the personality file will be
-     * missing from e.g. base images.
-     */
-    if (!g_key_file_load_from_file (key_file, PERSONALITY_FILE_PATH,
-                                    G_KEY_FILE_NONE, NULL))
-      goto out;
-
-    GError *error = NULL;
-    personality = g_key_file_get_string (key_file, PERSONALITY_CONFIG_GROUP,
-                                         PERSONALITY_KEY, &error);
-
-    if (error != NULL)
-      {
-        g_warning ("Could not read " PERSONALITY_KEY " from "
-                   PERSONALITY_FILE_PATH ": %s.", error->message);
-        g_error_free (error);
-      }
-
- out:
-    g_key_file_unref (key_file);
-
-    return (personality != NULL) ? personality : g_strdup ("");
-}
-
 static gboolean
 record_os_version (gpointer unused)
 {
@@ -266,16 +234,13 @@ record_os_version (gpointer unused)
     if (!get_os_version (&os_name, &os_version))
       return G_SOURCE_REMOVE;
 
-    gchar *eos_personality = get_eos_personality ();
-
     GVariant *payload = g_variant_new ("(sss)",
-                                       os_name, os_version, eos_personality);
+                                       os_name, os_version, "");
     emtr_event_recorder_record_event (emtr_event_recorder_get_default (),
                                       OS_VERSION_EVENT, payload);
 
     g_free (os_name);
     g_free (os_version);
-    g_free (eos_personality);
 
     return G_SOURCE_REMOVE;
 }
