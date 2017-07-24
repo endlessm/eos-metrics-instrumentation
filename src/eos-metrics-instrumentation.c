@@ -148,28 +148,29 @@
 
 /*
  * Reported once at startup to describe whether certain ACPI tables are present
- * on the system. The payload has type a{sb} -- a map from string to boolean.
- * The tables in question are MSDM and SLIC, which hold OEM Windows license
- * information on newer and older systems respectively. Example payloads:
+ * on the system. The payload has type u, formed as a bitmask of which ACPI
+ * tables are found. The tables we check for are MSDM and SLIC, which hold
+ * OEM Windows license information on newer and older systems respectively.
+ * The bits are mapped as:
  *
- * {"MSDM": true,  "SLIC": false} - a system shipped with newer Windows
- * {"MSDM": false, "SLIC": true } - a system shipped with Vista-era Windows
- * {"MSDM": false, "SLIC": false} - a system shipped without Windows
+ *  0: no table found, system shipped without Windows
+ *  1: MSDM table found, system shipped with newer Windows
+ *  2: SLIC table found, system shipped with Vista-era Windows
  *
  * We have not seen systems which have both tables, but they might exist in the
- * wild!  With this information, assuming LIVE_BOOT_EVENT is not sent, then we
- * can distinguish:
+ * wild and would appear with a value of 3. With this information, assuming
+ * LIVE_BOOT_EVENT is not sent, then we can distinguish:
  *
  *  SLIC|MSDM | DUAL_BOOT | Meaning
  * -----------+-----------+----------------------------------------------------
- *    true    |   false   | Endless OS is the sole OS, PC came with Windows
- *    true    |   true    | Endless OS installed alongside OEM Windows
- *    false   |   false   | Endless OS is the sole OS, PC came without Windows
- *    false   |   true    | Dual-booting with a retail Windows
+ *    >0      |   false   | Endless OS is the sole OS, PC came with Windows
+ *    >0      |   true    | Endless OS installed alongside OEM Windows
+ *     0      |   false   | Endless OS is the sole OS, PC came without Windows
+ *     0      |   true    | Dual-booting with a retail Windows
  */
-#define WINDOWS_LICENSE_TABLES_EVENT "5311a1be-0ed1-44c2-b780-7c4d5d6037f8"
+#define WINDOWS_LICENSE_TABLES_EVENT "ef74310f-7c7e-ca05-0e56-3e495973070a"
 #define ACPI_TABLES_PATH "/sys/firmware/acpi/tables"
-static const gchar * const windows_license_tables[] = {"MSDM", "SLIC"};
+static const gchar * const windows_license_tables[] = { "MSDM", "SLIC" };
 
 static gboolean prev_time_set = FALSE;
 static gint64 prev_time;
@@ -974,10 +975,8 @@ static gboolean
 record_windows_licenses (gpointer unused)
 {
     g_autoptr(GFile) tables = g_file_new_for_path (ACPI_TABLES_PATH);
-    g_auto(GVariantBuilder) builder;
+    guint32 licenses = 0;
     gsize i;
-
-    g_variant_builder_init (&builder, G_VARIANT_TYPE ("a{sb}"));
 
     for (i = 0; i < G_N_ELEMENTS (windows_license_tables); i++)
       {
@@ -988,12 +987,15 @@ record_windows_licenses (gpointer unused)
         g_debug ("ACPI table %s is %s",
                  table_name,
                  present ? "present" : "absent");
-        g_variant_builder_add (&builder, "{sb}", table_name, present);
+
+        if (present)
+          licenses |= 1 << i;
       }
 
     emtr_event_recorder_record_event (emtr_event_recorder_get_default (),
                                       WINDOWS_LICENSE_TABLES_EVENT,
-                                      g_variant_builder_end (&builder));
+                                      g_variant_new_uint32 (licenses));
+
     return G_SOURCE_REMOVE;
 }
 
