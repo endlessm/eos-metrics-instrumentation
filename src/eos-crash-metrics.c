@@ -94,15 +94,44 @@ get_ostree_commits (void)
     return table;
 }
 
+/* This is the way that the kernel gives us paths ... */
+static const char *blacklisted_prefixes[] =
+{
+    "!home",
+    "!sysroot!home"
+};
+
+static gboolean
+is_blacklisted_path (const char *path)
+{
+    /* I can never remember that helper macro that does this ... */
+    const size_t n_blacklisted_prefixes = sizeof (blacklisted_prefixes) / sizeof (blacklisted_prefixes[0]);
+    size_t i = 0;
+
+    for (; i < n_blacklisted_prefixes; ++i) {
+        if (g_str_has_prefix (path, blacklisted_prefixes[i]))
+            return TRUE;
+    }
+
+    return FALSE;
+}
+
 int
 main (int argc, char **argv)
 {
-    const gchar *binary = argv[1];
+    const gchar *path = argv[1];
     const gint16 signal = atoi (argv[2]);
     const gint64 timestamp = atoll (argv[3]);
-    g_autoptr(GHashTable) ostree_commits = get_ostree_commits();
+    g_autoptr(GHashTable) ostree_commits = NULL;
 
-    report_crash (binary, signal, timestamp, ostree_commits);
+    if (is_blacklisted_path (path)) {
+        g_message ("%s is blacklisted, not reporting crash", path);
+        return 0;
+    }
+
+    ostree_commits = get_ostree_commits();
+
+    report_crash (path, signal, timestamp, ostree_commits);
 
     return 0;
 }
