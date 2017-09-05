@@ -86,6 +86,7 @@ EOS_METRICS_REQUIREMENT="eosmetrics-0 >= 0.3.0"
 GEOCLUE_REQUIREMENT="geoclue-2.0"
 GLIB_REQUIREMENT="glib-2.0"
 GIO_REQUIREMENT="gio-2.0"
+OSTREE_REQUIREMENT="ostree-1"
 
 # Required build tools
 # --------------------
@@ -161,6 +162,7 @@ PKG_CHECK_MODULES([EOS_INSTRUMENTATION], [
     $GEOCLUE_REQUIREMENT
     $GLIB_REQUIREMENT
     $GIO_REQUIREMENT
+    $OSTREE_REQUIREMENT
 ])
 
 # This indicates a required dbus mocking interface for unit testing.

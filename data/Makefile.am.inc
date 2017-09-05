@@ -31,6 +31,12 @@ data/eos-metrics-instrumentation.conf: data/eos-metrics-instrumentation.conf.in
 	$(edit) $< >$@.tmp && \
 	mv $@.tmp $@
 
+data/90-eos-crash-metrics.conf: data/90-eos-crash-metrics.conf.in
+	$(AM_V_GEN)$(MKDIR_P) data && \
+	rm -f $@ $@.tmp && \
+	$(edit) $< >$@.tmp && \
+	mv $@.tmp $@
+
 edit = sed \
 	-e 's|@libexecdir[@]|$(libexecdir)|g' \
 	-e 's|@instrumentationcachedir[@]|$(instrumentationcachedir)|g' \
@@ -39,12 +45,17 @@ edit = sed \
 tmpfilesddir = $(prefix)/lib/tmpfiles.d/
 tmpfilesd_DATA = data/eos-metrics-instrumentation.conf
 
+sysctldir = $(prefix)/lib/sysctl.d/
+sysctl_DATA = data/90-eos-crash-metrics.conf
+
 EXTRA_DIST += \
+	data/90-eos-crash-metrics.conf.in \
 	data/eos-metrics-instrumentation.service.in \
 	data/eos-metrics-instrumentation.conf.in \
 	$(NULL)
 
 CLEANFILES += \
+	data/90-eos-crash-metrics.conf \
 	data/eos-metrics-instrumentation.service \
 	data/eos-metrics-instrumentation.conf \
 	$(NULL)
