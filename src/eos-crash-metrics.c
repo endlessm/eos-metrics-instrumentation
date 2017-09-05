@@ -50,18 +50,21 @@ static void
 report_crash (const char *binary,
               gint16 signal,
               gint64 timestamp,
-              GHashTable *commits)
+              const char *ostree_commit,
+              const char *ostree_url)
 {
     g_autoptr(GHashTable) ht = g_hash_table_new_full (g_str_hash,
                                                       g_str_equal,
                                                       g_free,
                                                       (GDestroyNotify) g_variant_unref);
-    GVariant *commits_variant = hashtable_to_variant (map_string_ht_to_variant_ht (commits));
 
     g_hash_table_insert (ht, g_strdup ("binary"), g_variant_new_string (binary));
     g_hash_table_insert (ht, g_strdup ("signal"), g_variant_new_int16 (signal));
     g_hash_table_insert (ht, g_strdup ("timestamp"), g_variant_new_int16 (timestamp));
-    g_hash_table_insert (ht, g_strdup ("commits"), commits_variant);
+    g_hash_table_insert (ht, g_strdup ("ostree_commit"), g_variant_new_string (ostree_commit != NULL ? ostree_commit : ""));
+    g_hash_table_insert (ht, g_strdup ("ostree_commit"), g_variant_new_string (ostree_url != NULL ? ostree_url : ""));
+
+    g_message("%s %s", ostree_commit, ostree_url);
 
     emtr_event_recorder_record_event_sync (emtr_event_recorder_get_default (),
                                            PROGRAM_DUMPED_CORE_EVENT,
@@ -94,6 +97,71 @@ get_ostree_commits (void)
     return table;
 }
 
+static OstreeSysroot *
+load_ostree_sysroot (void)
+{
+    OstreeSysroot *sysroot = ostree_sysroot_new_default ();
+    g_autoptr(GError) error = NULL;
+
+    if (!ostree_sysroot_load (sysroot, NULL, &error)) {
+        g_warning ("Unable to get current OSTree sysroot: %s", error->message);
+        return NULL;
+    }
+
+    return sysroot;
+}
+
+static char *
+get_eos_ostree_repo_url (OstreeSysroot *sysroot, OstreeRepo *repo)
+{
+    GKeyFile *config = NULL;
+    g_autoptr(GError) error = NULL;
+    char *url = NULL;
+
+    config = ostree_repo_get_config (repo);
+
+    if (!(url = g_key_file_get_string (config, "remote \"eos\"", "url", &error))) {
+        g_warning ("Unable to read OSTree config for eos remote URL: %s", error->message);
+        return NULL;
+    }
+
+    return url;
+}
+
+static char *
+get_eos_ostree_deployment_commit (OstreeSysroot *sysroot, OstreeRepo *repo)
+{
+    OstreeDeployment *deployment = ostree_sysroot_get_booted_deployment (sysroot);
+    GKeyFile *config = NULL;
+    g_autoptr(GError) error = NULL;
+    g_autofree char *refspec = NULL;
+    g_autofree char *commit = NULL;
+
+    if (!deployment) {
+        g_warning ("OSTree deployment is not currently booted, cannot read state");
+        return NULL;
+    }
+
+    config = ostree_deployment_get_origin (deployment);
+
+    if (!ostree_sysroot_get_repo (sysroot, &repo, NULL, &error)) {
+        g_warning ("Unable to read repo in sysroot: %s", error->message);
+        return NULL;
+    }
+
+    if (!(refspec = g_key_file_get_string (config, "origin", "refspec", &error))) {
+        g_warning ("Unable to read OSTree refspec for booted deployment: %s", error->message);
+        return NULL;
+    }
+
+    if (!ostree_repo_resolve_rev (repo, refspec, FALSE, &commit, &error)) {
+        g_warning ("Unable to resolve revision for refpsec %s: %s", refspec, error->message);
+        return NULL;
+    }
+
+    return commit;
+}
+
 /* This is the way that the kernel gives us paths ... */
 static const char *blacklisted_prefixes[] =
 {
@@ -122,16 +190,27 @@ main (int argc, char **argv)
     const gchar *path = argv[1];
     const gint16 signal = atoi (argv[2]);
     const gint64 timestamp = atoll (argv[3]);
-    g_autoptr(GHashTable) ostree_commits = NULL;
+    g_autoptr(OstreeSysroot) sysroot = NULL;
+    g_autoptr(OstreeRepo) repo = NULL;
+    g_autoptr(GError) error = NULL;
+    g_autofree char *url = NULL;
+    g_autofree char *commit = NULL;
 
     if (is_blacklisted_path (path)) {
         g_message ("%s is blacklisted, not reporting crash", path);
         return 0;
     }
 
-    ostree_commits = get_ostree_commits();
+    sysroot = load_ostree_sysroot ();
 
-    report_crash (path, signal, timestamp, ostree_commits);
+    if (ostree_sysroot_get_repo (sysroot, &repo, NULL, &error)) {
+        url = get_eos_ostree_repo_url (sysroot, repo);
+        commit = get_eos_ostree_deployment_commit (sysroot, repo);
+    } else {
+        g_warning ("Unable to read ostree repo from sysroot: %s", error->message);
+    }
+
+    report_crash (path, signal, timestamp, url, commit);
 
     return 0;
 }
