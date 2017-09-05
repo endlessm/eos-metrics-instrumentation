@@ -16,7 +16,10 @@
 ## along with eos-metrics-instrumentation.  If not, see
 ## <http://www.gnu.org/licenses/>.
 
-libexec_PROGRAMS = src/eos-metrics-instrumentation
+libexec_PROGRAMS = \
+	src/eos-metrics-instrumentation \
+	src/eos-crash-metrics \
+    $(NULL)
 
 src/geoclue.c: src/geoclue.h
 src/geoclue.h: $(GEOCLUE_DBUS_INTERFACE_XML)
@@ -45,3 +48,14 @@ src_eos_metrics_instrumentation_CPPFLAGS = \
 
 # Libraries to link against
 src_eos_metrics_instrumentation_LDADD = $(EOS_INSTRUMENTATION_LIBS)
+
+src_eos_crash_metrics_SOURCES = \
+	src/eos-crash-metrics.c \
+	$(NULL)
+
+
+src_eos_crash_metrics_CPPFLAGS = \
+	$(EOS_INSTRUMENTATION_CFLAGS) \
+	$(NULL)
+
+src_eos_crash_metrics_LDADD = $(EOS_INSTRUMENTATION_LIBS)
