@@ -83,6 +83,7 @@ AC_DEFINE([EOS_INSTRUMENTATION_VERSION], [_EOS_INSTRUMENTATION_VERSION_MACRO], [
 # Required versions of libraries
 # Update these whenever you use a function that requires a certain API version
 EOS_METRICS_REQUIREMENT="eosmetrics-0 >= 0.3.0"
+FLATPAK_REQUIREMENT="flatpak"
 GEOCLUE_REQUIREMENT="geoclue-2.0"
 GLIB_REQUIREMENT="glib-2.0"
 GIO_REQUIREMENT="gio-2.0"
@@ -159,6 +160,7 @@ AC_SUBST([systemdsystemunitdir])
 # ------------------
 PKG_CHECK_MODULES([EOS_INSTRUMENTATION], [
     $EOS_METRICS_REQUIREMENT
+    $FLATPAK_REQUIREMENT
     $GEOCLUE_REQUIREMENT
     $GLIB_REQUIREMENT
     $GIO_REQUIREMENT
