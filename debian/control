@@ -5,7 +5,6 @@ Maintainer: Kurt von Laven <kurt@endlessm.com>
 Build-Depends: debhelper (>= 9),
 	autotools-dev,
 	eos-metrics-0-dev (>= 0.3.0),
-	eos-sdk-0-dev (>= 0.0.0),
 	geoclue-2.0,
 	libflatpak-dev,
 	libglib2.0-dev,
