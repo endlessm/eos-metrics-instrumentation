@@ -29,6 +29,8 @@ BUILT_SOURCES += src/geoclue.c src/geoclue.h
 
 src_eos_metrics_instrumentation_SOURCES = \
 	src/eos-metrics-instrumentation.c \
+	src/eins-hwinfo.h \
+	src/eins-hwinfo.c \
 	src/eins-location.h \
 	src/eins-location.c \
 	src/eins-network-id.h \

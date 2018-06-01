@@ -26,6 +26,7 @@
 
 #include <eosmetrics/eosmetrics.h>
 
+#include "eins-hwinfo.h"
 #include "eins-location.h"
 #include "eins-network-id.h"
 #include "eins-persistent-tally.h"
@@ -1030,6 +1031,8 @@ main (gint                argc,
   g_idle_add ((GSourceFunc) record_windows_licenses, NULL);
   g_timeout_add_seconds (RECORD_UPTIME_INTERVAL / 2,
                          (GSourceFunc) record_uptime, NULL);
+
+  eins_hwinfo_start ();
 
   g_unix_signal_add (SIGHUP, (GSourceFunc) quit_main_loop, main_loop);
   g_unix_signal_add (SIGINT, (GSourceFunc) quit_main_loop, main_loop);
