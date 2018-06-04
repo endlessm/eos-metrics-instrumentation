@@ -185,90 +185,90 @@ static gboolean
 get_os_version (gchar **name_out,
                 gchar **version_out)
 {
-    GError *error = NULL;
-    gboolean succeeded = FALSE;
-    gchar *name = NULL;
-    gchar *version = NULL;
+  GError *error = NULL;
+  gboolean succeeded = FALSE;
+  gchar *name = NULL;
+  gchar *version = NULL;
 
-    GFile *os_release_file = g_file_new_for_path (OS_RELEASE_FILE);
-    GFileInputStream *file_stream =
-      g_file_read (os_release_file, NULL, &error);
-    g_object_unref (os_release_file);
+  GFile *os_release_file = g_file_new_for_path (OS_RELEASE_FILE);
+  GFileInputStream *file_stream =
+    g_file_read (os_release_file, NULL, &error);
+  g_object_unref (os_release_file);
 
-    if (error)
+  if (error)
+    goto out;
+
+  GDataInputStream *data_stream =
+    g_data_input_stream_new (G_INPUT_STREAM (file_stream));
+  g_object_unref (file_stream);
+
+  while (!name || !version)
+    {
+      gchar *line =
+        g_data_input_stream_read_line (data_stream, NULL, NULL, &error);
+      if (!line)
+        break;
+
+      if (g_str_has_prefix (line, "NAME="))
+        name = line;
+      else if (g_str_has_prefix (line, "VERSION="))
+        version = line;
+      else
+        g_free (line);
+    }
+
+  g_object_unref (data_stream);
+
+  if (error)
+    goto out;
+
+  if (!name || !version)
+    {
+      g_warning ("Could not find at least one of NAME or VERSION keys in "
+                 OS_RELEASE_FILE ".");
       goto out;
+    }
 
-    GDataInputStream *data_stream =
-      g_data_input_stream_new (G_INPUT_STREAM (file_stream));
-    g_object_unref (file_stream);
+  /* According to os-release(5), these values can be quoted, escaped,
+   * etc. For simplicity, instead of doing the parsing on the client
+   * side, we do it on the server side.
+   */
+  *name_out = g_strdup (name + strlen ("NAME="));
+  *version_out = g_strdup (version + strlen ("VERSION="));
 
-    while (!name || !version)
-      {
-        gchar *line =
-          g_data_input_stream_read_line (data_stream, NULL, NULL, &error);
-        if (!line)
-          break;
+  succeeded = TRUE;
 
-        if (g_str_has_prefix (line, "NAME="))
-          name = line;
-        else if (g_str_has_prefix (line, "VERSION="))
-          version = line;
-        else
-          g_free (line);
-      }
+out:
+  if (error)
+    {
+      g_warning ("Error reading " OS_RELEASE_FILE ": %s.", error->message);
+      g_error_free (error);
+    }
 
-    g_object_unref (data_stream);
+  g_free (name);
+  g_free (version);
 
-    if (error)
-      goto out;
-
-    if (!name || !version)
-      {
-        g_warning ("Could not find at least one of NAME or VERSION keys in "
-                   OS_RELEASE_FILE ".");
-        goto out;
-      }
-
-    /* According to os-release(5), these values can be quoted, escaped,
-     * etc. For simplicity, instead of doing the parsing on the client
-     * side, we do it on the server side.
-     */
-    *name_out = g_strdup (name + strlen ("NAME="));
-    *version_out = g_strdup (version + strlen ("VERSION="));
-
-    succeeded = TRUE;
-
- out:
-    if (error)
-      {
-        g_warning ("Error reading " OS_RELEASE_FILE ": %s.", error->message);
-        g_error_free (error);
-      }
-
-    g_free (name);
-    g_free (version);
-
-    return succeeded;
+  return succeeded;
 }
 
 static gboolean
 record_os_version (gpointer unused)
 {
-    gchar *os_name = NULL;
-    gchar *os_version = NULL;
+  gchar *os_name = NULL;
+  gchar *os_version = NULL;
 
-    if (!get_os_version (&os_name, &os_version))
-      return G_SOURCE_REMOVE;
-
-    GVariant *payload = g_variant_new ("(sss)",
-                                       os_name, os_version, "");
-    emtr_event_recorder_record_event (emtr_event_recorder_get_default (),
-                                      OS_VERSION_EVENT, payload);
-
-    g_free (os_name);
-    g_free (os_version);
-
+  if (!get_os_version (&os_name, &os_version))
     return G_SOURCE_REMOVE;
+
+  GVariant *payload = g_variant_new ("(sss)",
+                                     os_name, os_version, "");
+  emtr_event_recorder_record_event (emtr_event_recorder_get_default (),
+                                    OS_VERSION_EVENT, payload);
+
+  g_free (os_name);
+  g_free (os_version);
+
+  return G_SOURCE_REMOVE;
 }
 
 static void
@@ -299,82 +299,82 @@ check_cmdline (gboolean *is_live_boot,
 static gboolean
 record_live_boot (gpointer unused)
 {
-    gboolean is_live_boot, is_dual_boot;
+  gboolean is_live_boot, is_dual_boot;
 
-    check_cmdline (&is_live_boot, &is_dual_boot);
+  check_cmdline (&is_live_boot, &is_dual_boot);
 
-    if (is_live_boot)
-      emtr_event_recorder_record_event (emtr_event_recorder_get_default (),
-                                        LIVE_BOOT_EVENT, NULL);
-    else if (is_dual_boot)
-      emtr_event_recorder_record_event (emtr_event_recorder_get_default (),
-                                        DUAL_BOOT_EVENT, NULL);
+  if (is_live_boot)
+    emtr_event_recorder_record_event (emtr_event_recorder_get_default (),
+                                      LIVE_BOOT_EVENT, NULL);
+  else if (is_dual_boot)
+    emtr_event_recorder_record_event (emtr_event_recorder_get_default (),
+                                      DUAL_BOOT_EVENT, NULL);
 
-    return G_SOURCE_REMOVE;
+  return G_SOURCE_REMOVE;
 }
 
 static gchar *
 get_image_version_for_path (const gchar *path)
 {
-    ssize_t xattr_size;
-    g_autofree gchar *image_version = NULL;
+  ssize_t xattr_size;
+  g_autofree gchar *image_version = NULL;
 
-    xattr_size = getxattr (path, EOS_IMAGE_VERSION_XATTR, NULL, 0);
+  xattr_size = getxattr (path, EOS_IMAGE_VERSION_XATTR, NULL, 0);
 
-    if (xattr_size < 0 || xattr_size > SSIZE_MAX - 1)
+  if (xattr_size < 0 || xattr_size > SSIZE_MAX - 1)
+    return NULL;
+
+  image_version = g_malloc0 (xattr_size + 1);
+
+  xattr_size = getxattr (path, EOS_IMAGE_VERSION_XATTR,
+                         image_version, xattr_size);
+
+  /* this check is primarily for ERANGE, in case the attribute size has
+   * changed from the first call to this one */
+  if (xattr_size < 0)
+    {
+      g_warning ("Error when getting 'eos-image-version' from %s: %s", path,
+                 strerror (errno));
       return NULL;
+    }
 
-    image_version = g_malloc0 (xattr_size + 1);
+  /* shouldn't happen, but if the filesystem is modified or corrupted, we
+   * don't want to cause assertion errors / D-Bus disconnects with invalid
+   * UTF-8 strings */
+  if (!g_utf8_validate (image_version, xattr_size, NULL))
+    {
+      g_warning ("Invalid UTF-8 when getting 'eos-image-version' from %s",
+                 path);
+      return NULL;
+    }
 
-    xattr_size = getxattr (path, EOS_IMAGE_VERSION_XATTR,
-                           image_version, xattr_size);
-
-    /* this check is primarily for ERANGE, in case the attribute size has
-     * changed from the first call to this one */
-    if (xattr_size < 0)
-      {
-        g_warning ("Error when getting 'eos-image-version' from %s: %s", path,
-                   strerror (errno));
-        return NULL;
-      }
-
-    /* shouldn't happen, but if the filesystem is modified or corrupted, we
-     * don't want to cause assertion errors / D-Bus disconnects with invalid
-     * UTF-8 strings */
-    if (!g_utf8_validate (image_version, xattr_size, NULL))
-      {
-        g_warning ("Invalid UTF-8 when getting 'eos-image-version' from %s",
-                   path);
-        return NULL;
-      }
-
-    return g_steal_pointer (&image_version);
+  return g_steal_pointer (&image_version);
 }
 
 static gchar *
 get_image_version (void)
 {
-    gchar *image_version = get_image_version_for_path (EOS_IMAGE_VERSION_PATH);
+  gchar *image_version = get_image_version_for_path (EOS_IMAGE_VERSION_PATH);
 
-    if (image_version == NULL)
-      image_version = get_image_version_for_path (EOS_IMAGE_VERSION_ALT_PATH);
+  if (image_version == NULL)
+    image_version = get_image_version_for_path (EOS_IMAGE_VERSION_ALT_PATH);
 
-    return image_version;
+  return image_version;
 }
 
 static gboolean
 record_image_version (gpointer unused)
 {
-    g_autofree gchar *image_version = NULL;
+  g_autofree gchar *image_version = NULL;
 
-    image_version = get_image_version ();
+  image_version = get_image_version ();
 
-    if (image_version != NULL)
-      emtr_event_recorder_record_event (emtr_event_recorder_get_default (),
-                                        EOS_IMAGE_VERSION_EVENT,
-                                        g_variant_new_string (image_version));
+  if (image_version != NULL)
+    emtr_event_recorder_record_event (emtr_event_recorder_get_default (),
+                                      EOS_IMAGE_VERSION_EVENT,
+                                      g_variant_new_string (image_version));
 
-    return G_SOURCE_REMOVE;
+  return G_SOURCE_REMOVE;
 }
 
 /*
@@ -390,50 +390,50 @@ record_startup (GDBusProxy *dbus_proxy,
                 GVariant   *parameters,
                 gpointer    user_data)
 {
-    if (strcmp (signal_name, "StartupFinished") == 0)
-      {
-        emtr_event_recorder_record_event (emtr_event_recorder_get_default (),
-                                          STARTUP_FINISHED, parameters);
+  if (strcmp (signal_name, "StartupFinished") == 0)
+    {
+      emtr_event_recorder_record_event (emtr_event_recorder_get_default (),
+                                        STARTUP_FINISHED, parameters);
 
-        GError *error = NULL;
-        GVariant *unsubscribe_result =
-          g_dbus_proxy_call_sync (dbus_proxy, "Unsubscribe",
-                                  NULL /* parameters */,
-                                  G_DBUS_CALL_FLAGS_NONE, -1 /* timeout */,
-                                  NULL /* GCancellable */, &error);
-        if (unsubscribe_result == NULL)
-          {
-            g_warning ("Error unsubscribing from systemd signals: %s.",
-                       error->message);
-            g_error_free (error);
-            return;
-          }
+      GError *error = NULL;
+      GVariant *unsubscribe_result =
+        g_dbus_proxy_call_sync (dbus_proxy, "Unsubscribe",
+                                NULL /* parameters */,
+                                G_DBUS_CALL_FLAGS_NONE, -1 /* timeout */,
+                                NULL /* GCancellable */, &error);
+      if (unsubscribe_result == NULL)
+        {
+          g_warning ("Error unsubscribing from systemd signals: %s.",
+                     error->message);
+          g_error_free (error);
+          return;
+        }
 
-        g_variant_unref (unsubscribe_result);
-     }
+      g_variant_unref (unsubscribe_result);
+    }
 }
 
 static gboolean
 increment_boot_count (gpointer unused)
 {
-    const gchar *tally_file_override = g_getenv ("EOS_INSTRUMENTATION_CACHE");
-    GError *error = NULL;
-    if (tally_file_override != NULL)
-      persistent_tally =
-        eins_persistent_tally_new_full (tally_file_override, &error);
-    else
-      persistent_tally = eins_persistent_tally_new (&error);
+  const gchar *tally_file_override = g_getenv ("EOS_INSTRUMENTATION_CACHE");
+  GError *error = NULL;
+  if (tally_file_override != NULL)
+    persistent_tally =
+      eins_persistent_tally_new_full (tally_file_override, &error);
+  else
+    persistent_tally = eins_persistent_tally_new (&error);
 
-    if (persistent_tally == NULL)
-      {
-        g_warning ("Could not create persistent tally object: %s.",
-                   error->message);
-        g_error_free (error);
-        return G_SOURCE_REMOVE;
-      }
+  if (persistent_tally == NULL)
+    {
+      g_warning ("Could not create persistent tally object: %s.",
+                 error->message);
+      g_error_free (error);
+      return G_SOURCE_REMOVE;
+    }
 
-    eins_persistent_tally_add_to_tally (persistent_tally, BOOT_COUNT_KEY, 1);
-    return G_SOURCE_REMOVE;
+  eins_persistent_tally_add_to_tally (persistent_tally, BOOT_COUNT_KEY, 1);
+  return G_SOURCE_REMOVE;
 }
 
 /* Returns an auxiliary payload that is a 2-tuple of the form
@@ -447,40 +447,40 @@ increment_boot_count (gpointer unused)
 static GVariant *
 make_uptime_payload (void)
 {
-    gint64 current_time;
-    gboolean got_current_time =
-      emtr_util_get_current_time (CLOCK_MONOTONIC, &current_time);
+  gint64 current_time;
+  gboolean got_current_time =
+    emtr_util_get_current_time (CLOCK_MONOTONIC, &current_time);
 
-    if (!got_current_time || !prev_time_set || persistent_tally == NULL)
-      return NULL;
+  if (!got_current_time || !prev_time_set || persistent_tally == NULL)
+    return NULL;
 
-    gint64 time_elapsed = current_time - prev_time;
-    gboolean add_succeeded =
-      eins_persistent_tally_add_to_tally (persistent_tally, UPTIME_KEY,
-                                          time_elapsed);
+  gint64 time_elapsed = current_time - prev_time;
+  gboolean add_succeeded =
+    eins_persistent_tally_add_to_tally (persistent_tally, UPTIME_KEY,
+                                        time_elapsed);
 
-    if (!add_succeeded)
-      return NULL;
+  if (!add_succeeded)
+    return NULL;
 
-    prev_time = current_time;
+  prev_time = current_time;
 
-    gint64 total_uptime;
-    gboolean got_uptime =
-      eins_persistent_tally_get_tally (persistent_tally, UPTIME_KEY,
-                                       &total_uptime);
+  gint64 total_uptime;
+  gboolean got_uptime =
+    eins_persistent_tally_get_tally (persistent_tally, UPTIME_KEY,
+                                     &total_uptime);
 
-    if (!got_uptime)
-      return NULL;
+  if (!got_uptime)
+    return NULL;
 
-    gint64 boot_count;
-    gboolean got_boot_count =
-      eins_persistent_tally_get_tally (persistent_tally, BOOT_COUNT_KEY,
-                                       &boot_count);
+  gint64 boot_count;
+  gboolean got_boot_count =
+    eins_persistent_tally_get_tally (persistent_tally, BOOT_COUNT_KEY,
+                                     &boot_count);
 
-    if (!got_boot_count)
-      return NULL;
+  if (!got_boot_count)
+    return NULL;
 
-    return g_variant_new ("(xx)", total_uptime, boot_count);
+  return g_variant_new ("(xx)", total_uptime, boot_count);
 }
 
 /* Intended for use as a GSourceFunc callback. Records an uptime event. Reports
@@ -490,12 +490,12 @@ make_uptime_payload (void)
 static gboolean
 record_uptime (gpointer unused)
 {
-    GVariant *uptime_payload = make_uptime_payload ();
-    emtr_event_recorder_record_event (emtr_event_recorder_get_default (),
-                                      UPTIME_EVENT, uptime_payload);
-    g_timeout_add_seconds (RECORD_UPTIME_INTERVAL, (GSourceFunc) record_uptime,
-                           NULL);
-    return G_SOURCE_REMOVE;
+  GVariant *uptime_payload = make_uptime_payload ();
+  emtr_event_recorder_record_event (emtr_event_recorder_get_default (),
+                                    UPTIME_EVENT, uptime_payload);
+  g_timeout_add_seconds (RECORD_UPTIME_INTERVAL, (GSourceFunc) record_uptime,
+                         NULL);
+  return G_SOURCE_REMOVE;
 }
 
 /* Records a system shutdown event. Reports the running uptime tally that spans
@@ -505,11 +505,11 @@ record_uptime (gpointer unused)
 static void
 record_shutdown (void)
 {
-    GVariant *uptime_payload = make_uptime_payload ();
-    emtr_event_recorder_record_event_sync (emtr_event_recorder_get_default (),
-                                           SHUTDOWN_EVENT, uptime_payload);
+  GVariant *uptime_payload = make_uptime_payload ();
+  emtr_event_recorder_record_event_sync (emtr_event_recorder_get_default (),
+                                         SHUTDOWN_EVENT, uptime_payload);
 
-    g_object_unref (persistent_tally);
+  g_object_unref (persistent_tally);
 }
 
 /*
@@ -519,45 +519,45 @@ record_shutdown (void)
 static GDBusProxy *
 systemd_dbus_proxy_new (void)
 {
-    GError *error = NULL;
-    GDBusProxy *dbus_proxy =
-      g_dbus_proxy_new_for_bus_sync (G_BUS_TYPE_SYSTEM,
-                                     G_DBUS_PROXY_FLAGS_NONE,
-                                     NULL /* GDBusInterfaceInfo */,
-                                     "org.freedesktop.systemd1",
-                                     "/org/freedesktop/systemd1",
-                                     "org.freedesktop.systemd1.Manager",
-                                     NULL /* GCancellable */,
-                                     &error);
-    if (dbus_proxy == NULL)
-      {
-        g_warning ("Error creating GDBusProxy: %s.", error->message);
-        g_error_free (error);
-        return NULL;
-      }
+  GError *error = NULL;
+  GDBusProxy *dbus_proxy =
+    g_dbus_proxy_new_for_bus_sync (G_BUS_TYPE_SYSTEM,
+                                   G_DBUS_PROXY_FLAGS_NONE,
+                                   NULL /* GDBusInterfaceInfo */,
+                                   "org.freedesktop.systemd1",
+                                   "/org/freedesktop/systemd1",
+                                   "org.freedesktop.systemd1.Manager",
+                                   NULL /* GCancellable */,
+                                   &error);
+  if (dbus_proxy == NULL)
+    {
+      g_warning ("Error creating GDBusProxy: %s.", error->message);
+      g_error_free (error);
+      return NULL;
+    }
 
-    g_signal_connect (dbus_proxy, "g-signal", G_CALLBACK (record_startup),
-                      NULL /* data */);
+  g_signal_connect (dbus_proxy, "g-signal", G_CALLBACK (record_startup),
+                    NULL /* data */);
 
-    GVariant *subscribe_result =
-      g_dbus_proxy_call_sync (dbus_proxy, "Subscribe", NULL /* parameters*/,
-                              G_DBUS_CALL_FLAGS_NONE, -1 /* timeout */,
-                              NULL /* GCancellable*/, &error);
-    if (subscribe_result == NULL)
-      {
-        g_warning ("Error subscribing to systemd signals: %s.", error->message);
-        g_error_free (error);
+  GVariant *subscribe_result =
+    g_dbus_proxy_call_sync (dbus_proxy, "Subscribe", NULL /* parameters*/,
+                            G_DBUS_CALL_FLAGS_NONE, -1 /* timeout */,
+                            NULL /* GCancellable*/, &error);
+  if (subscribe_result == NULL)
+    {
+      g_warning ("Error subscribing to systemd signals: %s.", error->message);
+      g_error_free (error);
 
-        /*
-         * We still might receive systemd signals even though Subscribe failed.
-         * As long as at least one process successfully subscribes, the systemd
-         * manager will emit all signals.
-         */
-        return dbus_proxy;
-      }
+      /*
+       * We still might receive systemd signals even though Subscribe failed.
+       * As long as at least one process successfully subscribes, the systemd
+       * manager will emit all signals.
+       */
+      return dbus_proxy;
+    }
 
-    g_variant_unref (subscribe_result);
-    return dbus_proxy;
+  g_variant_unref (subscribe_result);
+  return dbus_proxy;
 }
 
 /*
@@ -570,65 +570,65 @@ static gboolean
 get_user_id (const gchar *session_path,
              guint32     *user_id)
 {
-    GError *error = NULL;
-    GDBusProxy *dbus_proxy =
-      g_dbus_proxy_new_for_bus_sync (G_BUS_TYPE_SYSTEM,
-                                     G_DBUS_PROXY_FLAGS_NONE,
-                                     NULL /* GDBusInterfaceInfo */,
-                                     "org.freedesktop.login1",
-                                     session_path,
-                                     "org.freedesktop.DBus.Properties",
-                                     NULL /* GCancellable */,
-                                     &error);
+  GError *error = NULL;
+  GDBusProxy *dbus_proxy =
+    g_dbus_proxy_new_for_bus_sync (G_BUS_TYPE_SYSTEM,
+                                   G_DBUS_PROXY_FLAGS_NONE,
+                                   NULL /* GDBusInterfaceInfo */,
+                                   "org.freedesktop.login1",
+                                   session_path,
+                                   "org.freedesktop.DBus.Properties",
+                                   NULL /* GCancellable */,
+                                   &error);
 
-    if (dbus_proxy == NULL)
-      {
-        g_warning ("Error creating GDBusProxy: %s.", error->message);
-        g_error_free (error);
-        return FALSE;
-      }
+  if (dbus_proxy == NULL)
+    {
+      g_warning ("Error creating GDBusProxy: %s.", error->message);
+      g_error_free (error);
+      return FALSE;
+    }
 
-    GVariant *get_user_args =
-      g_variant_new_parsed ("('org.freedesktop.login1.Session', 'User')");
-    GVariant *user_result = g_dbus_proxy_call_sync (dbus_proxy,
-                                                    "Get",
-                                                    get_user_args,
-                                                    G_DBUS_CALL_FLAGS_NONE,
-                                                    -1 /* timeout */,
-                                                    NULL /* GCancellable */,
-                                                    &error);
-    g_object_unref (dbus_proxy);
+  GVariant *get_user_args =
+    g_variant_new_parsed ("('org.freedesktop.login1.Session', 'User')");
+  GVariant *user_result = g_dbus_proxy_call_sync (dbus_proxy,
+                                                  "Get",
+                                                  get_user_args,
+                                                  G_DBUS_CALL_FLAGS_NONE,
+                                                  -1 /* timeout */,
+                                                  NULL /* GCancellable */,
+                                                  &error);
+  g_object_unref (dbus_proxy);
 
-    if (user_result == NULL)
-      {
-        g_warning ("Error getting user ID: %s.", error->message);
-        g_error_free (error);
-        return FALSE;
-      }
+  if (user_result == NULL)
+    {
+      g_warning ("Error getting user ID: %s.", error->message);
+      g_error_free (error);
+      return FALSE;
+    }
 
-    GVariant *user_variant = g_variant_get_child_value (user_result, 0);
-    g_variant_unref (user_result);
-    GVariant *user_tuple = g_variant_get_child_value (user_variant, 0);
-    g_variant_unref (user_variant);
-    g_variant_get_child (user_tuple, 0, "u", user_id);
-    g_variant_unref (user_tuple);
-    return TRUE;
+  GVariant *user_variant = g_variant_get_child_value (user_result, 0);
+  g_variant_unref (user_result);
+  GVariant *user_tuple = g_variant_get_child_value (user_variant, 0);
+  g_variant_unref (user_variant);
+  g_variant_get_child (user_tuple, 0, "u", user_id);
+  g_variant_unref (user_tuple);
+  return TRUE;
 }
 
 static gboolean
 is_human_session (const gchar *session_id)
 {
-    /* All normal user sessions start with digits -- greeter sessions
-     * start with 'c'.
-     */
-    return g_ascii_isdigit (session_id[0]);
+  /* All normal user sessions start with digits -- greeter sessions
+   * start with 'c'.
+   */
+  return g_ascii_isdigit (session_id[0]);
 }
 
 static gboolean
 session_in_set (const gchar *session_id)
 {
-    gpointer data = g_datalist_get_data (&humanity_by_session_id, session_id);
-    return (gboolean) GPOINTER_TO_UINT (data);
+  gpointer data = g_datalist_get_data (&humanity_by_session_id, session_id);
+  return (gboolean) GPOINTER_TO_UINT (data);
 }
 
 /*
@@ -639,12 +639,12 @@ session_in_set (const gchar *session_id)
 static gboolean
 add_session_to_set (const gchar *session_id)
 {
-    if (!is_human_session (session_id) || session_in_set (session_id))
-      return FALSE;
+  if (!is_human_session (session_id) || session_in_set (session_id))
+    return FALSE;
 
-    g_datalist_set_data (&humanity_by_session_id, session_id,
-                         GUINT_TO_POINTER (TRUE));
-    return TRUE;
+  g_datalist_set_data (&humanity_by_session_id, session_id,
+                       GUINT_TO_POINTER (TRUE));
+  return TRUE;
 }
 
 /*
@@ -655,11 +655,11 @@ add_session_to_set (const gchar *session_id)
 static gboolean
 remove_session_from_set (const gchar *session_id)
 {
-    if (!is_human_session (session_id) || !session_in_set (session_id))
-      return FALSE;
+  if (!is_human_session (session_id) || !session_in_set (session_id))
+    return FALSE;
 
-    g_datalist_remove_data (&humanity_by_session_id, session_id);
-    return TRUE;
+  g_datalist_remove_data (&humanity_by_session_id, session_id);
+  return TRUE;
 }
 
 /*
@@ -671,40 +671,40 @@ record_stop_for_login (GQuark   session_id_quark,
                        gpointer unused,
                        gpointer user_data)
 {
-    const gchar *session_id = g_quark_to_string (session_id_quark);
-    GVariant *session_id_variant = g_variant_new_string (session_id);
-    emtr_event_recorder_record_stop_sync (emtr_event_recorder_get_default (),
-                                          USER_IS_LOGGED_IN,
-                                          session_id_variant,
-                                          NULL /* auxiliary_payload */);
+  const gchar *session_id = g_quark_to_string (session_id_quark);
+  GVariant *session_id_variant = g_variant_new_string (session_id);
+  emtr_event_recorder_record_stop_sync (emtr_event_recorder_get_default (),
+                                        USER_IS_LOGGED_IN,
+                                        session_id_variant,
+                                        NULL /* auxiliary_payload */);
 }
 
 static void
 add_session (const gchar *session_id,
              guint32      user_id)
 {
-    if (!add_session_to_set (session_id))
-      return;
+  if (!add_session_to_set (session_id))
+    return;
 
-    GVariant *user_id_variant =
-      (user_id >= MIN_HUMAN_USER_ID) ? g_variant_new_uint32 (user_id) : NULL;
+  GVariant *user_id_variant =
+    (user_id >= MIN_HUMAN_USER_ID) ? g_variant_new_uint32 (user_id) : NULL;
 
-    emtr_event_recorder_record_start (emtr_event_recorder_get_default (),
-                                      USER_IS_LOGGED_IN,
-                                      g_variant_new_string (session_id),
-                                      user_id_variant);
+  emtr_event_recorder_record_start (emtr_event_recorder_get_default (),
+                                    USER_IS_LOGGED_IN,
+                                    g_variant_new_string (session_id),
+                                    user_id_variant);
 }
 
 static void
 remove_session (const gchar *session_id)
 {
-    if (!remove_session_from_set (session_id))
-      return;
+  if (!remove_session_from_set (session_id))
+    return;
 
-    emtr_event_recorder_record_stop_sync (emtr_event_recorder_get_default (),
-                                          USER_IS_LOGGED_IN,
-                                          g_variant_new_string (session_id),
-                                          NULL /* auxiliary_payload */);
+  emtr_event_recorder_record_stop_sync (emtr_event_recorder_get_default (),
+                                        USER_IS_LOGGED_IN,
+                                        g_variant_new_string (session_id),
+                                        NULL /* auxiliary_payload */);
 }
 
 /*
@@ -727,83 +727,83 @@ record_login (GDBusProxy *dbus_proxy,
               GVariant   *parameters,
               gpointer    user_data)
 {
-    if (strcmp ("SessionRemoved", signal_name) == 0)
-      {
-        const gchar *session_id;
-        g_variant_get (parameters, "(&s&o)", &session_id, NULL);
+  if (strcmp ("SessionRemoved", signal_name) == 0)
+    {
+      const gchar *session_id;
+      g_variant_get (parameters, "(&s&o)", &session_id, NULL);
 
-        remove_session (session_id);
-      }
-    else if (strcmp ("SessionNew", signal_name) == 0)
-      {
-        const gchar *session_id, *session_path;
-        g_variant_get (parameters, "(&s&o)", &session_id, &session_path);
+      remove_session (session_id);
+    }
+  else if (strcmp ("SessionNew", signal_name) == 0)
+    {
+      const gchar *session_id, *session_path;
+      g_variant_get (parameters, "(&s&o)", &session_id, &session_path);
 
-        guint32 user_id;
-        if (!get_user_id (session_path, &user_id))
-          return;
+      guint32 user_id;
+      if (!get_user_id (session_path, &user_id))
+        return;
 
-        add_session (session_id, user_id);
-      }
+      add_session (session_id, user_id);
+    }
 }
 
 static void
 record_logout_for_all_remaining_sessions (void)
 {
-    g_datalist_foreach (&humanity_by_session_id,
-                        (GDataForeachFunc) record_stop_for_login,
-                        NULL /* user_data */);
-    g_datalist_clear (&humanity_by_session_id);
+  g_datalist_foreach (&humanity_by_session_id,
+                      (GDataForeachFunc) record_stop_for_login,
+                      NULL /* user_data */);
+  g_datalist_clear (&humanity_by_session_id);
 }
 
 static GDBusProxy *
 login_dbus_proxy_new (void)
 {
-    GError *error = NULL;
-    GDBusProxy *dbus_proxy =
-      g_dbus_proxy_new_for_bus_sync (G_BUS_TYPE_SYSTEM,
-                                     G_DBUS_PROXY_FLAGS_NONE,
-                                     NULL /* GDBusInterfaceInfo */,
-                                     "org.freedesktop.login1",
-                                     "/org/freedesktop/login1",
-                                     "org.freedesktop.login1.Manager",
-                                     NULL /* GCancellable */,
-                                     &error);
-    if (error)
-      {
-        g_warning ("Error creating GDBusProxy: %s.", error->message);
-        g_error_free (error);
-        return NULL;
-      }
+  GError *error = NULL;
+  GDBusProxy *dbus_proxy =
+    g_dbus_proxy_new_for_bus_sync (G_BUS_TYPE_SYSTEM,
+                                   G_DBUS_PROXY_FLAGS_NONE,
+                                   NULL /* GDBusInterfaceInfo */,
+                                   "org.freedesktop.login1",
+                                   "/org/freedesktop/login1",
+                                   "org.freedesktop.login1.Manager",
+                                   NULL /* GCancellable */,
+                                   &error);
+  if (error)
+    {
+      g_warning ("Error creating GDBusProxy: %s.", error->message);
+      g_error_free (error);
+      return NULL;
+    }
 
-    g_signal_connect (dbus_proxy, "g-signal", G_CALLBACK (record_login),
-                      NULL /* data */);
+  g_signal_connect (dbus_proxy, "g-signal", G_CALLBACK (record_login),
+                    NULL /* data */);
 
-    GVariant *sessions =
-      g_dbus_proxy_call_sync (dbus_proxy, "ListSessions", NULL,
-                              G_DBUS_CALL_FLAGS_NONE, -1, NULL, &error);
-    if (error)
-      {
-        g_warning ("Error calling ListSessions: %s.", error->message);
-        g_error_free (error);
-        return NULL;
-      }
+  GVariant *sessions =
+    g_dbus_proxy_call_sync (dbus_proxy, "ListSessions", NULL,
+                            G_DBUS_CALL_FLAGS_NONE, -1, NULL, &error);
+  if (error)
+    {
+      g_warning ("Error calling ListSessions: %s.", error->message);
+      g_error_free (error);
+      return NULL;
+    }
 
-    GVariantIter *session_iter;
-    g_variant_get (sessions, "(a(susso))", &session_iter);
+  GVariantIter *session_iter;
+  g_variant_get (sessions, "(a(susso))", &session_iter);
 
-    const gchar *session_id;
-    guint32 user_id;
-    while (g_variant_iter_loop (session_iter, "(&suss&o)", &session_id,
-                                &user_id, NULL, NULL, NULL))
-      {
-        add_session (session_id, user_id);
-      }
+  const gchar *session_id;
+  guint32 user_id;
+  while (g_variant_iter_loop (session_iter, "(&suss&o)", &session_id,
+                              &user_id, NULL, NULL, NULL))
+    {
+      add_session (session_id, user_id);
+    }
 
-    g_variant_iter_free (session_iter);
-    g_variant_unref (sessions);
+  g_variant_iter_free (session_iter);
+  g_variant_unref (sessions);
 
-    return dbus_proxy;
+  return dbus_proxy;
 }
 
 #define LOCATION_CONF_FILE SYSCONFDIR "/metrics/location.conf"
@@ -812,48 +812,48 @@ login_dbus_proxy_new (void)
 static gboolean
 record_location_label (gpointer unused)
 {
-    g_autoptr (GError) err = NULL;
-    g_autoptr (GKeyFile) kf = g_key_file_new ();
+  g_autoptr (GError) err = NULL;
+  g_autoptr (GKeyFile) kf = g_key_file_new ();
 
-    if (!g_key_file_load_from_file (kf, LOCATION_CONF_FILE, G_KEY_FILE_NONE, &err))
-      {
-        /* this file’s existence is optional, so not found is not an error */
-        if (g_error_matches (err, G_KEY_FILE_ERROR, G_KEY_FILE_ERROR_NOT_FOUND))
-          return G_SOURCE_REMOVE;
-
-        g_warning ("Failed to load " LOCATION_CONF_FILE ", unable to record location label: %s",
-                   err->message);
+  if (!g_key_file_load_from_file (kf, LOCATION_CONF_FILE, G_KEY_FILE_NONE, &err))
+    {
+      /* this file’s existence is optional, so not found is not an error */
+      if (g_error_matches (err, G_KEY_FILE_ERROR, G_KEY_FILE_ERROR_NOT_FOUND))
         return G_SOURCE_REMOVE;
-      }
 
-    g_auto (GStrv) keys = g_key_file_get_keys (kf, LOCATION_LABEL_GROUP, NULL, NULL);
-    if (keys == NULL || *keys == NULL)
+      g_warning ("Failed to load " LOCATION_CONF_FILE ", unable to record location label: %s",
+                 err->message);
       return G_SOURCE_REMOVE;
+    }
 
-    g_autoptr (GString) label = g_string_new ("");
-    g_auto (GVariantBuilder) builder = G_VARIANT_BUILDER_INIT (G_VARIANT_TYPE_ARRAY);
-    for (GStrv cur = keys; *cur != NULL; cur++)
-      {
-        const gchar *key = *cur;
-        g_autofree gchar *val = g_key_file_get_string (kf, LOCATION_LABEL_GROUP, key, NULL);
-
-        if (val == NULL)
-          continue;
-
-        if (cur != keys)
-          g_string_append (label, ", ");
-
-        g_variant_builder_add (&builder, "{ss}", key, val);
-        g_string_append_printf (label, "\"%s\" = \"%s\"", key, val);
-      }
-
-    g_message ("Recording location label: %s", label->str);
-
-    emtr_event_recorder_record_event (emtr_event_recorder_get_default (),
-                                      LOCATION_LABEL_EVENT,
-                                      g_variant_builder_end (&builder));
-
+  g_auto (GStrv) keys = g_key_file_get_keys (kf, LOCATION_LABEL_GROUP, NULL, NULL);
+  if (keys == NULL || *keys == NULL)
     return G_SOURCE_REMOVE;
+
+  g_autoptr (GString) label = g_string_new ("");
+  g_auto (GVariantBuilder) builder = G_VARIANT_BUILDER_INIT (G_VARIANT_TYPE_ARRAY);
+  for (GStrv cur = keys; *cur != NULL; cur++)
+    {
+      const gchar *key = *cur;
+      g_autofree gchar *val = g_key_file_get_string (kf, LOCATION_LABEL_GROUP, key, NULL);
+
+      if (val == NULL)
+        continue;
+
+      if (cur != keys)
+        g_string_append (label, ", ");
+
+      g_variant_builder_add (&builder, "{ss}", key, val);
+      g_string_append_printf (label, "\"%s\" = \"%s\"", key, val);
+    }
+
+  g_message ("Recording location label: %s", label->str);
+
+  emtr_event_recorder_record_event (emtr_event_recorder_get_default (),
+                                    LOCATION_LABEL_EVENT,
+                                    g_variant_builder_end (&builder));
+
+  return G_SOURCE_REMOVE;
 }
 
 static void
@@ -863,54 +863,54 @@ on_location_file_changed (GFileMonitor *monitor,
                           GFileMonitorEvent event_type,
                           gpointer user_data)
 {
-    if (event_type == G_FILE_MONITOR_EVENT_CHANGES_DONE_HINT)
-      record_location_label (NULL);
+  if (event_type == G_FILE_MONITOR_EVENT_CHANGES_DONE_HINT)
+    record_location_label (NULL);
 }
 
 static GFileMonitor *
 location_file_monitor_new (void)
 {
-    g_autoptr (GFile) file = g_file_new_for_path (LOCATION_CONF_FILE);
-    g_autoptr (GError) err = NULL;
-    g_autoptr (GFileMonitor) monitor = g_file_monitor_file (file, G_FILE_MONITOR_NONE,
-                                                            NULL, &err);
+  g_autoptr (GFile) file = g_file_new_for_path (LOCATION_CONF_FILE);
+  g_autoptr (GError) err = NULL;
+  g_autoptr (GFileMonitor) monitor = g_file_monitor_file (file, G_FILE_MONITOR_NONE,
+                                                          NULL, &err);
 
-    if (err != NULL)
-      {
-        g_warning ("Couldn't set up file monitor for " LOCATION_CONF_FILE ": %s",
-                   err->message);
-        return NULL;
-      }
+  if (err != NULL)
+    {
+      g_warning ("Couldn't set up file monitor for " LOCATION_CONF_FILE ": %s",
+                 err->message);
+      return NULL;
+    }
 
-    g_signal_connect (monitor, "changed", G_CALLBACK (on_location_file_changed),
-                      NULL);
+  g_signal_connect (monitor, "changed", G_CALLBACK (on_location_file_changed),
+                    NULL);
 
-    return g_steal_pointer (&monitor);
+  return g_steal_pointer (&monitor);
 }
 
 static gboolean
 record_network_id (gpointer force_ptr)
 {
-    gboolean force = GPOINTER_TO_INT (force_ptr);
-    guint32 network_id;
+  gboolean force = GPOINTER_TO_INT (force_ptr);
+  guint32 network_id;
 
-    if (!eins_network_id_get (&network_id))
-      {
-        return G_SOURCE_REMOVE;
-      }
+  if (!eins_network_id_get (&network_id))
+    {
+      return G_SOURCE_REMOVE;
+    }
 
-    if (network_id != previous_network_id || force)
-      {
-        g_message ("Recording network ID: %8x", network_id);
+  if (network_id != previous_network_id || force)
+    {
+      g_message ("Recording network ID: %8x", network_id);
 
-        emtr_event_recorder_record_event (emtr_event_recorder_get_default (),
-                                          NETWORK_ID_EVENT,
-                                          g_variant_new_uint32 (network_id));
+      emtr_event_recorder_record_event (emtr_event_recorder_get_default (),
+                                        NETWORK_ID_EVENT,
+                                        g_variant_new_uint32 (network_id));
 
-        previous_network_id = network_id;
-      }
+      previous_network_id = network_id;
+    }
 
-    return G_SOURCE_REMOVE;
+  return G_SOURCE_REMOVE;
 }
 
 /* from https://developer.gnome.org/NetworkManager/unstable/nm-dbus-types.html#NMState */
@@ -923,130 +923,130 @@ record_network_change (GDBusProxy *dbus_proxy,
                        GVariant   *parameters,
                        gpointer    user_data)
 {
-    if (strcmp ("StateChanged", signal_name) == 0)
-      {
-        guint32 new_network_state;
-        g_variant_get (parameters, "(u)", &new_network_state);
+  if (strcmp ("StateChanged", signal_name) == 0)
+    {
+      guint32 new_network_state;
+      g_variant_get (parameters, "(u)", &new_network_state);
 
-        GVariant *status_change = g_variant_new ("(uu)", previous_network_state,
-                                                 new_network_state);
+      GVariant *status_change = g_variant_new ("(uu)", previous_network_state,
+                                               new_network_state);
 
-        emtr_event_recorder_record_event (emtr_event_recorder_get_default (),
-                                          NETWORK_STATUS_CHANGED_EVENT,
-                                          status_change);
+      emtr_event_recorder_record_event (emtr_event_recorder_get_default (),
+                                        NETWORK_STATUS_CHANGED_EVENT,
+                                        status_change);
 
-        /* schedule recording the network ID provided we have a default route */
-        if (new_network_state >= NM_STATE_CONNECTED_SITE)
-          {
-            g_idle_add ((GSourceFunc) record_network_id, GINT_TO_POINTER (FALSE));
-          }
+      /* schedule recording the network ID provided we have a default route */
+      if (new_network_state >= NM_STATE_CONNECTED_SITE)
+        {
+          g_idle_add ((GSourceFunc) record_network_id, GINT_TO_POINTER (FALSE));
+        }
 
-        previous_network_state = new_network_state;
-      }
+      previous_network_state = new_network_state;
+    }
 }
 
 static GDBusProxy *
 network_dbus_proxy_new (void)
 {
-    GError *error = NULL;
-    GDBusProxy *dbus_proxy =
-      g_dbus_proxy_new_for_bus_sync (G_BUS_TYPE_SYSTEM,
-                                     G_DBUS_PROXY_FLAGS_NONE,
-                                     NULL /* GDBusInterfaceInfo */,
-                                     "org.freedesktop.NetworkManager",
-                                     "/org/freedesktop/NetworkManager",
-                                     "org.freedesktop.NetworkManager",
-                                     NULL /* GCancellable */,
-                                     &error);
-    if (dbus_proxy == NULL)
-      {
-        g_warning ("Error creating GDBusProxy: %s.", error->message);
-        g_error_free (error);
-      }
-    else
-      {
-        g_signal_connect (dbus_proxy, "g-signal",
-                          G_CALLBACK (record_network_change), NULL /* data */);
-      }
-    return dbus_proxy;
+  GError *error = NULL;
+  GDBusProxy *dbus_proxy =
+    g_dbus_proxy_new_for_bus_sync (G_BUS_TYPE_SYSTEM,
+                                   G_DBUS_PROXY_FLAGS_NONE,
+                                   NULL /* GDBusInterfaceInfo */,
+                                   "org.freedesktop.NetworkManager",
+                                   "/org/freedesktop/NetworkManager",
+                                   "org.freedesktop.NetworkManager",
+                                   NULL /* GCancellable */,
+                                   &error);
+  if (dbus_proxy == NULL)
+    {
+      g_warning ("Error creating GDBusProxy: %s.", error->message);
+      g_error_free (error);
+    }
+  else
+    {
+      g_signal_connect (dbus_proxy, "g-signal",
+                        G_CALLBACK (record_network_change), NULL /* data */);
+    }
+  return dbus_proxy;
 }
 
 static gboolean
 record_windows_licenses (gpointer unused)
 {
-    g_autoptr(GFile) tables = g_file_new_for_path (ACPI_TABLES_PATH);
-    guint32 licenses = 0;
-    gsize i;
+  g_autoptr(GFile) tables = g_file_new_for_path (ACPI_TABLES_PATH);
+  guint32 licenses = 0;
+  gsize i;
 
-    for (i = 0; i < G_N_ELEMENTS (windows_license_tables); i++)
-      {
-        const gchar *table_name = windows_license_tables[i];
-        g_autoptr(GFile) table = g_file_get_child (tables, table_name);
-        gboolean present = g_file_query_exists (table, NULL);
+  for (i = 0; i < G_N_ELEMENTS (windows_license_tables); i++)
+    {
+      const gchar *table_name = windows_license_tables[i];
+      g_autoptr(GFile) table = g_file_get_child (tables, table_name);
+      gboolean present = g_file_query_exists (table, NULL);
 
-        g_debug ("ACPI table %s is %s",
-                 table_name,
-                 present ? "present" : "absent");
+      g_debug ("ACPI table %s is %s",
+               table_name,
+               present ? "present" : "absent");
 
-        if (present)
-          licenses |= 1 << i;
-      }
+      if (present)
+        licenses |= 1 << i;
+    }
 
-    emtr_event_recorder_record_event (emtr_event_recorder_get_default (),
-                                      WINDOWS_LICENSE_TABLES_EVENT,
-                                      g_variant_new_uint32 (licenses));
+  emtr_event_recorder_record_event (emtr_event_recorder_get_default (),
+                                    WINDOWS_LICENSE_TABLES_EVENT,
+                                    g_variant_new_uint32 (licenses));
 
-    return G_SOURCE_REMOVE;
+  return G_SOURCE_REMOVE;
 }
 
 static gboolean
 quit_main_loop (GMainLoop *main_loop)
 {
-    g_main_loop_quit (main_loop);
-    return G_SOURCE_REMOVE;
+  g_main_loop_quit (main_loop);
+  return G_SOURCE_REMOVE;
 }
 
 gint
 main (gint                argc,
       const gchar * const argv[])
 {
-    prev_time_set = emtr_util_get_current_time (CLOCK_MONOTONIC, &prev_time);
-    g_datalist_init (&humanity_by_session_id);
+  prev_time_set = emtr_util_get_current_time (CLOCK_MONOTONIC, &prev_time);
+  g_datalist_init (&humanity_by_session_id);
 
-    GDBusProxy *systemd_dbus_proxy = systemd_dbus_proxy_new ();
-    GDBusProxy *login_dbus_proxy = login_dbus_proxy_new ();
-    GDBusProxy *network_dbus_proxy = network_dbus_proxy_new ();
-    GFileMonitor *location_file_monitor = location_file_monitor_new ();
+  GDBusProxy *systemd_dbus_proxy = systemd_dbus_proxy_new ();
+  GDBusProxy *login_dbus_proxy = login_dbus_proxy_new ();
+  GDBusProxy *network_dbus_proxy = network_dbus_proxy_new ();
+  GFileMonitor *location_file_monitor = location_file_monitor_new ();
 
-    GMainLoop *main_loop = g_main_loop_new (NULL, TRUE);
+  GMainLoop *main_loop = g_main_loop_new (NULL, TRUE);
 
-    g_idle_add ((GSourceFunc) record_location_metric, NULL);
-    g_idle_add ((GSourceFunc) record_os_version, NULL);
-    g_idle_add ((GSourceFunc) increment_boot_count, NULL);
-    g_idle_add ((GSourceFunc) record_live_boot, NULL);
-    g_idle_add ((GSourceFunc) record_image_version, NULL);
-    g_idle_add ((GSourceFunc) record_location_label, NULL);
-    g_idle_add ((GSourceFunc) record_network_id, GINT_TO_POINTER (TRUE));
-    g_idle_add ((GSourceFunc) record_windows_licenses, NULL);
-    g_timeout_add_seconds (RECORD_UPTIME_INTERVAL / 2,
-                           (GSourceFunc) record_uptime, NULL);
+  g_idle_add ((GSourceFunc) record_location_metric, NULL);
+  g_idle_add ((GSourceFunc) record_os_version, NULL);
+  g_idle_add ((GSourceFunc) increment_boot_count, NULL);
+  g_idle_add ((GSourceFunc) record_live_boot, NULL);
+  g_idle_add ((GSourceFunc) record_image_version, NULL);
+  g_idle_add ((GSourceFunc) record_location_label, NULL);
+  g_idle_add ((GSourceFunc) record_network_id, GINT_TO_POINTER (TRUE));
+  g_idle_add ((GSourceFunc) record_windows_licenses, NULL);
+  g_timeout_add_seconds (RECORD_UPTIME_INTERVAL / 2,
+                         (GSourceFunc) record_uptime, NULL);
 
-    g_unix_signal_add (SIGHUP, (GSourceFunc) quit_main_loop, main_loop);
-    g_unix_signal_add (SIGINT, (GSourceFunc) quit_main_loop, main_loop);
-    g_unix_signal_add (SIGTERM, (GSourceFunc) quit_main_loop, main_loop);
-    g_unix_signal_add (SIGUSR1, (GSourceFunc) quit_main_loop, main_loop);
-    g_unix_signal_add (SIGUSR2, (GSourceFunc) quit_main_loop, main_loop);
+  g_unix_signal_add (SIGHUP, (GSourceFunc) quit_main_loop, main_loop);
+  g_unix_signal_add (SIGINT, (GSourceFunc) quit_main_loop, main_loop);
+  g_unix_signal_add (SIGTERM, (GSourceFunc) quit_main_loop, main_loop);
+  g_unix_signal_add (SIGUSR1, (GSourceFunc) quit_main_loop, main_loop);
+  g_unix_signal_add (SIGUSR2, (GSourceFunc) quit_main_loop, main_loop);
 
-    g_main_loop_run (main_loop);
+  g_main_loop_run (main_loop);
 
-    record_logout_for_all_remaining_sessions ();
-    record_shutdown ();
+  record_logout_for_all_remaining_sessions ();
+  record_shutdown ();
 
-    g_main_loop_unref (main_loop);
-    g_clear_object (&systemd_dbus_proxy);
-    g_clear_object (&login_dbus_proxy);
-    g_clear_object (&network_dbus_proxy);
-    g_clear_object (&location_file_monitor);
+  g_main_loop_unref (main_loop);
+  g_clear_object (&systemd_dbus_proxy);
+  g_clear_object (&login_dbus_proxy);
+  g_clear_object (&network_dbus_proxy);
+  g_clear_object (&location_file_monitor);
 
-    return EXIT_SUCCESS;
+  return EXIT_SUCCESS;
 }
