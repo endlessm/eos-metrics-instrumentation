@@ -20,6 +20,7 @@
 
 #include <eosmetrics/eosmetrics.h>
 #include <gio/gio.h>
+#include <glibtop/mem.h>
 
 /*
  * Reported at system startup, and every RECORD_DISK_SPACE_INTERVAL_SECONDS
@@ -45,6 +46,12 @@
 
 /* One day */
 #define RECORD_DISK_SPACE_INTERVAL_SECONDS (60u * 60u * 24u)
+
+/*
+ * The amount of physical memory accessible to Endless OS, in bytes. Reported
+ * once at system startup. The payload is a uint64 (t)
+ */
+#define RAM_SIZE_EVENT "49719ed8-d753-4ba0-9b0d-0abfc65fb95b"
 
 static GVariant *
 get_disk_space_for_partition (GFile *file)
@@ -111,10 +118,26 @@ record_disk_space (gpointer data)
   return GPOINTER_TO_INT (data);
 }
 
+static gboolean
+record_ram_size (gpointer unused)
+{
+  glibtop_mem mem;
+  GVariant *payload;
+
+  glibtop_get_mem (&mem);
+  payload = g_variant_new_uint64 (mem.total);
+  emtr_event_recorder_record_event (emtr_event_recorder_get_default (),
+                                    RAM_SIZE_EVENT,
+                                    g_steal_pointer (&payload));
+  return G_SOURCE_REMOVE;
+}
+
 void
 eins_hwinfo_start (void)
 {
   g_idle_add (record_disk_space, GINT_TO_POINTER (G_SOURCE_REMOVE));
   g_timeout_add_seconds (RECORD_DISK_SPACE_INTERVAL_SECONDS, record_disk_space,
                          GINT_TO_POINTER (G_SOURCE_CONTINUE));
+
+  g_idle_add (record_ram_size, NULL);
 }
