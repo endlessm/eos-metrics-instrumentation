@@ -21,7 +21,7 @@
 #include <eosmetrics/eosmetrics.h>
 #include <gio/gio.h>
 #include <glibtop/mem.h>
-#include <glibtop/sysinfo.h>
+#include <json-glib/json-glib.h>
 
 /*
  * Reported at system startup, and every RECORD_DISK_SPACE_INTERVAL_SECONDS
@@ -55,19 +55,28 @@
 #define RAM_SIZE_EVENT "49719ed8-d753-4ba0-9b0d-0abfc65fb95b"
 
 /*
- * CPU models in the system, with the number of threads. Reported once at
- * system startup. The payload is a map from string to uint16 (a{sq}). For
- * example, a laptop fitted with an i7-5500U (which has 2 physical cores, each
- * with 2 threads) will be reported as:
+ * CPUs in the system. Reported once at system startup. The payload is an array
+ * of triples -- a(sqd) -- containing the following information for each group
+ * of similar cores/threads:
  *
- * {
- *   "Intel(R) Core(TM) i7-5500U CPU @ 2.40GHz": 4,
- * }
+ * Field | Type   | Description              | Default if unknown
+ * ------+--------+--------------------------+-------------------
+ *     0 | string | Human-readable CPU model | ''
+ *     1 | uint16 | Number of cores/threads  | 0
+ *     2 | double | Maximum speed in MHz     | 0.
  *
- * In the unlikely event that the system has more than 65535 CPU threads, the
- * value will be capped at 65535.
+ * For example, a laptop fitted with an i7-5500U (which has 2 physical cores,
+ * each with 2 threads) will be reported as:
+ *
+ *  [
+ *    ('Intel(R) Core(TM) i7-5500U CPU @ 2.40GHz', 4, 3000.)
+ *  ]
+ *
+ * In principle, an ARM big.LITTLE system would have two elements in this
+ * array, containing details of the big and LITTLE cores. In practice, the
+ * current implementation only reports the currently-active cores.
  */
-#define CPU_MODELS_EVENT "1d5386c1-ff0f-43d1-b99b-7b2d3e5e2770"
+#define CPU_MODELS_EVENT "4a75488a-0d9a-4c38-8556-148f500edaf0"
 
 static GVariant *
 get_disk_space_for_partition (GFile *file)
@@ -148,73 +157,210 @@ record_ram_size (gpointer unused)
   return G_SOURCE_REMOVE;
 }
 
-/* Derived from gnome-control-center's get_cpu_info(). */
-static GVariant *
-get_cpu_info (const glibtop_sysinfo *info)
-{
-  /* Keys: gchar *, borrowed from info
-   * Values: guint32
+typedef struct _LscpuFieldType {
+  /* NULL-terminated list of names of fields to use from `lscpu --json` output,
+   * in order of preference.  Note that this output includes trailing colons in
+   * field names, which is presumably a bug caused by re-using the field names
+   * from the colon-separated default output.
    */
-  g_autoptr(GHashTable) counts = g_hash_table_new (g_str_hash, g_str_equal);
-  GHashTableIter iter;
-  gpointer key, value;
-  int i, j;
-  GVariantBuilder builder;
+  const gchar *names[3];
 
-  /* count duplicates */
-  for (i = 0; i != info->ncpu; ++i)
+  /* If NULL, the value should be treated as a string. */
+  const GVariantType *type;
+
+  /* Default value to use if the field can't be found in `lscpu --json` output,
+   * as a serialized GVariant if 'type' is non-NULL or a verbatim string
+   * otherwise.
+   */
+  const gchar *default_value;
+} LscpuFieldType;
+
+static const LscpuFieldType LSCPU_FIELDS[] = {
+  { { "Model name:", NULL }, NULL, "" },
+  { { "CPU(s):", NULL }, G_VARIANT_TYPE_UINT16, "0" },
+  /* From manual testing, CPU max MHz is not know within a VirtualBox VM. */
+  { { "CPU max MHz:", "CPU MHz:", NULL }, G_VARIANT_TYPE_DOUBLE, "0" },
+};
+static const gsize NUM_LSCPU_FIELDS = G_N_ELEMENTS (LSCPU_FIELDS);
+
+static GVariant *
+parse_field (const LscpuFieldType *ft,
+             const gchar          *data)
+{
+  g_autoptr(GError) error = NULL;
+  GVariant *value = NULL;
+
+  g_return_val_if_fail (ft != NULL, NULL);
+  g_return_val_if_fail (data != NULL, NULL);
+
+  if (ft->type == NULL)
     {
-      const char * const keys[] = { "model name", "cpu", "Processor" };
-      char *model;
-      int  *count;
-
-      model = NULL;
-
-      for (j = 0; model == NULL && j != G_N_ELEMENTS (keys); ++j)
-        {
-          model = g_hash_table_lookup (info->cpuinfo[i].values,
-                                       keys[j]);
-        }
-
-      if (model == NULL)
-        continue;
-
-      count = g_hash_table_lookup (counts, model);
-      if (count == NULL)
-        g_hash_table_insert (counts, model, GUINT_TO_POINTER (1));
-      else
-        g_hash_table_replace (counts, model, GUINT_TO_POINTER (GPOINTER_TO_UINT (count) + 1));
+      value = g_variant_new_string (data);
+    }
+  else if (!(value = g_variant_parse (ft->type, data, NULL, NULL,
+                                      &error)))
+    {
+      g_debug ("failed to parse %s '%s': %s", ft->names[0], data,
+               error->message);
+      g_clear_error (&error);
     }
 
-  g_variant_builder_init (&builder, G_VARIANT_TYPE_ARRAY);
-  g_hash_table_iter_init (&iter, counts);
-  while (g_hash_table_iter_next (&iter, &key, &value))
+  return value;
+}
+
+static const gchar *
+object_get_string_member (JsonObject  *object,
+                          const gchar *key)
+{
+  /* You'd hope that json_object_get_string_member() would gracefully return
+   * NULL in the case where the value is not a string, but it calls
+   * g_return_val_if_fail().  json-glib 1.6 has
+   * json_object_get_string_member_with_default() which looks more promising
+   * but it still criticals in the case where the value is non-scalar.
+   *
+   * https://gitlab.gnome.org/GNOME/json-glib/merge_requests/11
+   */
+  JsonNode *value = json_object_get_member (object, key);
+
+  if (value == NULL)
+    return NULL;
+
+  return json_node_get_string (value);
+}
+
+GVariant *
+eins_hwinfo_parse_lscpu_json (const gchar *json_data,
+                              gssize       json_size)
+{
+  g_autoptr(JsonParser) parser = json_parser_new ();
+  JsonNode *root, *lscpu_node;
+  JsonObject *root_object;
+  JsonArray *lscpu_array;
+  int i, n;
+  /* (const gchar *) => (const gchar *), both borrowed from JSON-land */
+  g_autoptr(GHashTable) fields = g_hash_table_new (g_str_hash, g_str_equal);
+  GVariant *elements[NUM_LSCPU_FIELDS];
+  GVariant *payload;
+  g_autoptr(GError) error = NULL;
+
+  memset (elements, 0, sizeof elements);
+
+  if (!json_parser_load_from_data (parser,
+                                   json_data,
+                                   json_size,
+                                   &error))
     {
-      const char *model = key;
-      guint count = GPOINTER_TO_INT (value);
-
-      if (count > G_MAXUINT16)
+      g_debug ("failed to parse lscpu --json output: %s", error->message);
+    }
+  else if (!(root = json_parser_get_root (parser))
+           || !JSON_NODE_HOLDS_OBJECT (root)
+           || !(root_object = json_node_get_object (root))
+           || !(lscpu_node = json_object_get_member (root_object, "lscpu"))
+           || !JSON_NODE_HOLDS_ARRAY (lscpu_node)
+           || !(lscpu_array = json_node_get_array (lscpu_node)))
+    {
+      g_debug ("lscpu --json didn't have expected structure");
+    }
+  else
+    {
+      for (i = 0, n = json_array_get_length (lscpu_array); i < n; i++)
         {
-          g_warning ("%s has %u threads; clamping to %" G_GUINT16_FORMAT,
-                     model, count, G_MAXUINT16);
-          count = G_MAXUINT16;
-        }
+          JsonNode *element_node = json_array_get_element (lscpu_array, i);
+          JsonObject *element;
+          const gchar *field, *data;
 
-      g_variant_builder_add (&builder, "{sq}", model, count);
+          if (!JSON_NODE_HOLDS_OBJECT (element_node))
+            {
+              g_debug ("array contained non-object element");
+              continue;
+            }
+
+          element = json_array_get_object_element (lscpu_array, i);
+
+          if (!(field = object_get_string_member (element, "field"))
+              || !(data = object_get_string_member (element, "data")))
+            {
+              g_debug ("element had no string at key %s",
+                       field == NULL ? "field" : "data");
+              continue;
+            }
+
+          if (!g_hash_table_replace (fields, (gpointer) field, (gpointer) data))
+            g_debug ("Already seen %s", field);
+        }
     }
 
-  return g_variant_builder_end (&builder);
+  for (i = 0; i < NUM_LSCPU_FIELDS; i++)
+    {
+      const LscpuFieldType *ft = &LSCPU_FIELDS[i];
+      const gchar * const *name = ft->names;
+
+      for (; elements[i] == NULL && *name != NULL; name++)
+        {
+          const gchar *data = g_hash_table_lookup (fields, *name);
+
+          if (data != NULL)
+            elements[i] = parse_field (ft, data);
+        }
+
+      if (elements[i] == NULL)
+        {
+          elements[i] = parse_field (ft, ft->default_value);
+          g_assert (elements[i] != NULL);
+        }
+    }
+
+  /* Sinks floating refs in 'elements' */
+  payload = g_variant_new_tuple (elements, NUM_LSCPU_FIELDS);
+
+  /* Right now, this output format from lscpu can only report one collection of
+   * CPUs. In principle we'd want to report both sets of cores of an ARM
+   * big.LITTLE device separately, so wrap this one element in an array to
+   * allow the same event ID to be used in future.
+   */
+  return g_variant_new_array (NULL, &payload, 1);
+}
+
+GVariant *
+eins_hwinfo_get_cpu_info (void)
+{
+  g_autoptr(GSubprocess) lscpu = NULL;
+  g_autoptr(GBytes) lsusb_stdout = NULL;
+  g_autoptr(JsonParser) parser = json_parser_new ();
+  const gchar *json_data = NULL;
+  gsize json_size;
+  g_autoptr(GError) error = NULL;
+  size_t i;
+
+  lscpu = g_subprocess_new (G_SUBPROCESS_FLAGS_STDOUT_PIPE, &error,
+                            "lscpu", "--json", NULL);
+  if (lscpu == NULL
+      || !g_subprocess_communicate (lscpu,
+                                    NULL /* stdin */,
+                                    NULL /* cancellable */,
+                                    &lsusb_stdout,
+                                    NULL /* stderr */,
+                                    &error)
+      || !g_subprocess_wait_check (lscpu, NULL /* cancellable */, &error))
+    {
+      g_warning ("error running lscpu: %s", error->message);
+      return NULL;
+    }
+
+  json_data = g_bytes_get_data (lsusb_stdout, &json_size);
+  g_return_val_if_fail (json_size <= G_MAXSSIZE, NULL);
+  return eins_hwinfo_parse_lscpu_json (json_data, (gssize) json_size);
 }
 
 static gboolean
 record_cpu_models (gpointer unused)
 {
-  const glibtop_sysinfo *info = glibtop_get_sysinfo ();
-  GVariant *payload = get_cpu_info (info);
+  GVariant *payload = eins_hwinfo_get_cpu_info ();
 
-  emtr_event_recorder_record_event (emtr_event_recorder_get_default (),
-                                    CPU_MODELS_EVENT,
-                                    g_steal_pointer (&payload));
+  if (payload != NULL)
+    emtr_event_recorder_record_event (emtr_event_recorder_get_default (),
+                                      CPU_MODELS_EVENT,
+                                      g_steal_pointer (&payload));
   return G_SOURCE_REMOVE;
 }
 

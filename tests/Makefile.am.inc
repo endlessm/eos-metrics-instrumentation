@@ -17,10 +17,12 @@
 ## <http://www.gnu.org/licenses/>.
 
 noinst_PROGRAMS += \
+	tests/test-hwinfo \
 	tests/test-persistent-tally \
 	$(NULL)
 
 TESTS = \
+	tests/test-hwinfo \
 	tests/test-persistent-tally \
 	tests/test-location.py \
 	run_coverage.coverage \
@@ -44,6 +46,16 @@ tests_test_persistent_tally_SOURCES = \
 tests_test_persistent_tally_CPPFLAGS = $(TEST_FLAGS)
 
 tests_test_persistent_tally_LDADD = $(TEST_LIBS)
+
+tests_test_hwinfo_SOURCES = \
+	src/eins-hwinfo.h \
+	src/eins-hwinfo.c \
+	tests/test-hwinfo.c \
+	$(NULL)
+
+tests_test_hwinfo_CPPFLAGS = $(TEST_FLAGS)
+
+tests_test_hwinfo_LDADD = $(TEST_LIBS)
 
 EXTRA_DIST += tests/test-location.py
 
