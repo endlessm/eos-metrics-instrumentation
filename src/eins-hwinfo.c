@@ -21,6 +21,7 @@
 #include <eosmetrics/eosmetrics.h>
 #include <gio/gio.h>
 #include <glibtop/mem.h>
+#include <glibtop/sysinfo.h>
 
 /*
  * Reported at system startup, and every RECORD_DISK_SPACE_INTERVAL_SECONDS
@@ -52,6 +53,21 @@
  * once at system startup. The payload is a uint64 (t)
  */
 #define RAM_SIZE_EVENT "49719ed8-d753-4ba0-9b0d-0abfc65fb95b"
+
+/*
+ * CPU models in the system, with the number of threads. Reported once at
+ * system startup. The payload is a map from string to uint16 (a{sq}). For
+ * example, a laptop fitted with an i7-5500U (which has 2 physical cores, each
+ * with 2 threads) will be reported as:
+ *
+ * {
+ *   "Intel(R) Core(TM) i7-5500U CPU @ 2.40GHz": 4,
+ * }
+ *
+ * In the unlikely event that the system has more than 65535 CPU threads, the
+ * value will be capped at 65535.
+ */
+#define CPU_MODELS_EVENT "1d5386c1-ff0f-43d1-b99b-7b2d3e5e2770"
 
 static GVariant *
 get_disk_space_for_partition (GFile *file)
@@ -132,6 +148,76 @@ record_ram_size (gpointer unused)
   return G_SOURCE_REMOVE;
 }
 
+/* Derived from gnome-control-center's get_cpu_info(). */
+static GVariant *
+get_cpu_info (const glibtop_sysinfo *info)
+{
+  /* Keys: gchar *, borrowed from info
+   * Values: guint32
+   */
+  g_autoptr(GHashTable) counts = g_hash_table_new (g_str_hash, g_str_equal);
+  GHashTableIter iter;
+  gpointer key, value;
+  int i, j;
+  GVariantBuilder builder;
+
+  /* count duplicates */
+  for (i = 0; i != info->ncpu; ++i)
+    {
+      const char * const keys[] = { "model name", "cpu", "Processor" };
+      char *model;
+      int  *count;
+
+      model = NULL;
+
+      for (j = 0; model == NULL && j != G_N_ELEMENTS (keys); ++j)
+        {
+          model = g_hash_table_lookup (info->cpuinfo[i].values,
+                                       keys[j]);
+        }
+
+      if (model == NULL)
+        continue;
+
+      count = g_hash_table_lookup (counts, model);
+      if (count == NULL)
+        g_hash_table_insert (counts, model, GUINT_TO_POINTER (1));
+      else
+        g_hash_table_replace (counts, model, GUINT_TO_POINTER (GPOINTER_TO_UINT (count) + 1));
+    }
+
+  g_variant_builder_init (&builder, G_VARIANT_TYPE_ARRAY);
+  g_hash_table_iter_init (&iter, counts);
+  while (g_hash_table_iter_next (&iter, &key, &value))
+    {
+      const char *model = key;
+      guint count = GPOINTER_TO_INT (value);
+
+      if (count > G_MAXUINT16)
+        {
+          g_warning ("%s has %u threads; clamping to %" G_GUINT16_FORMAT,
+                     model, count, G_MAXUINT16);
+          count = G_MAXUINT16;
+        }
+
+      g_variant_builder_add (&builder, "{sq}", model, count);
+    }
+
+  return g_variant_builder_end (&builder);
+}
+
+static gboolean
+record_cpu_models (gpointer unused)
+{
+  const glibtop_sysinfo *info = glibtop_get_sysinfo ();
+  GVariant *payload = get_cpu_info (info);
+
+  emtr_event_recorder_record_event (emtr_event_recorder_get_default (),
+                                    CPU_MODELS_EVENT,
+                                    g_steal_pointer (&payload));
+  return G_SOURCE_REMOVE;
+}
+
 void
 eins_hwinfo_start (void)
 {
@@ -140,4 +226,5 @@ eins_hwinfo_start (void)
                          GINT_TO_POINTER (G_SOURCE_CONTINUE));
 
   g_idle_add (record_ram_size, NULL);
+  g_idle_add (record_cpu_models, NULL);
 }
