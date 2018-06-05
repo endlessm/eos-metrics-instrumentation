@@ -19,6 +19,62 @@
 
 #include "eins-hwinfo.h"
 
+static void
+test_get_disk_space_for_root (void)
+{
+  g_autoptr(GFile) root = g_file_new_for_path ("/");
+  g_autoptr(GVariant) payload = NULL;
+  g_autoptr(GError) error = NULL;
+  guint32 total, used, available;
+
+  payload = eins_hwinfo_get_disk_space_for_partition (root, &error);
+  g_assert_no_error (error);
+  g_assert_nonnull (payload);
+
+  g_assert_cmpstr (g_variant_get_type_string (payload), ==, "(uuu)");
+  g_variant_get (payload, "(uuu)", &total, &used, &available);
+
+  g_assert_cmpuint (total, >, 0);
+  g_assert_cmpuint (used, >, 0);
+  /* maybe you have < 500 MB free, so no assertion about available itself */
+
+  /* since we round to the nearest gigabyte, used + available <= total may not
+   * hold -- what if used and available round up, but total rounds down? -- but
+   * we should be within 1 GB.
+   */
+  g_assert_cmpuint (used + available, <=, total + 1);
+}
+
+static void
+test_get_disk_space_for_nonexistent_dir (void)
+{
+  g_autoptr(GFile) nonexistent = NULL;
+  g_autoptr(GVariant) payload = NULL;
+  g_autoptr(GError) error = NULL;
+  guint32 total, used, available;
+
+  nonexistent = g_file_new_for_path ("/ca29d735-ca59-4774-8677-5bf3e9f34a7e");
+
+  payload = eins_hwinfo_get_disk_space_for_partition (nonexistent, &error);
+  g_assert_error (error, G_IO_ERROR, G_IO_ERROR_NOT_FOUND);
+  g_assert_null (payload);
+}
+
+static void
+test_get_ram_size_for_current_system (void)
+{
+  g_autoptr(GVariant) payload = eins_hwinfo_get_ram_size ();
+  guint32 size;
+
+  g_assert_nonnull (payload);
+  g_assert_cmpstr (g_variant_get_type_string (payload), ==, "u");
+  g_variant_get (payload, "u", &size);
+  /* If you have a system with less than 100 MB of RAM this test will fail.
+   * Good luck running Endless OS on that!
+   */
+  g_assert_cmpuint (size, >=, 100);
+}
+
 static const char *XPS_13_9343_JSON =
     "{"
     "   \"lscpu\": ["
@@ -175,6 +231,11 @@ main (int   argc,
   size_t i;
 
   g_test_init (&argc, &argv, NULL);
+
+  g_test_add_func ("/hwinfo/disk-space/ok", test_get_disk_space_for_root);
+  g_test_add_func ("/hwinfo/disk-space/noent", test_get_disk_space_for_nonexistent_dir);
+
+  g_test_add_func ("/hwinfo/ram/current", test_get_ram_size_for_current_system);
 
   for (i = 0; i < G_N_ELEMENTS (cpu_test_datas); i++)
     {

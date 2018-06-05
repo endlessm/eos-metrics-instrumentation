@@ -25,15 +25,13 @@
 
 /*
  * Reported at system startup, and every RECORD_DISK_SPACE_INTERVAL_SECONDS
- * after startup. The payload is two triples of int64, ((ttt)(ttt)).
+ * after startup. The payload is a triple of uint32, (uuu), representing the
+ * the total size, space used, and space available on the root filesystem,
+ * measured in gibibytes (2^30 bytes). We round to the nearest gibibyte: we
+ * have no need of a precise figure in the reported data.
  *
- * The first triple represents the total size, space used, and space available
- * on the / filesystem, measured in bytes. (On dual-boot installations, this
- * refers to the Endless OS image file, not the Windows partition it is hosted
- * on.)
- *
- * On split-disk systems, the second triple represents the /var/endless-extra
- * partition; on single-disk systems, all three values will be 0.
+ * On dual-boot installations, this refers to the Endless OS image file, not
+ * the Windows partition it is hosted on.
  *
  * Space on other user-accessible partitions on the disk, including Windows
  * partitions on dual-boot systems, is not reported.
@@ -42,17 +40,30 @@
  * could derive the third. That's not the case: typically, 5% of space is
  * reserved (so used + available = 0.95 * total) but this is a tunable
  * parameter of the filesystem.
+ *
+ * If disk space cannot be determined for some reason, this event will not be
+ * reported.
  */
-#define DISK_SPACE_EVENT "b76c645f-d041-41b0-a4d4-c29f86c18638"
+#define SYSROOT_DISK_SPACE_EVENT "5f58024f-3b99-47d3-a17f-1ec876acd97e"
+
+/* As above, but for the /var/endless-extra partition on split-disk systems. If
+ * nothing is mounted there, or if disk space cannot be determined for some
+ * reason, this event will not be reported.
+ */
+#define EXTRA_DISK_SPACE_EVENT "da505554-4248-4a38-bb32-84ab58e45a6d"
 
 /* One day */
 #define RECORD_DISK_SPACE_INTERVAL_SECONDS (60u * 60u * 24u)
 
+#define ONE_GIB_IN_BYTES (G_GUINT64_CONSTANT (1024 * 1024 * 1024))
+
 /*
- * The amount of physical memory accessible to Endless OS, in bytes. Reported
- * once at system startup. The payload is a uint64 (t)
+ * The amount of physical memory accessible to Endless OS, in mebibytes (2^20
+ * bytes). Reported once at system startup. The payload is a uint32 (u).
  */
-#define RAM_SIZE_EVENT "49719ed8-d753-4ba0-9b0d-0abfc65fb95b"
+#define RAM_SIZE_EVENT "aee94585-07a2-4483-a090-25abda650b12"
+
+#define ONE_MIB_IN_BYTES (G_GUINT64_CONSTANT (1024 * 1024))
 
 /*
  * CPUs in the system. Reported once at system startup. The payload is an array
@@ -78,11 +89,23 @@
  */
 #define CPU_MODELS_EVENT "4a75488a-0d9a-4c38-8556-148f500edaf0"
 
-static GVariant *
-get_disk_space_for_partition (GFile *file)
+static guint32
+round_to_nearest (guint64 size,
+                  guint64 divisor)
+{
+  if (G_MAXUINT64 - size < divisor / 2)
+    size = G_MAXUINT64;
+  else
+    size += divisor / 2;
+
+  return (guint32) CLAMP (size / divisor, 0, G_MAXUINT32);
+}
+
+GVariant *
+eins_hwinfo_get_disk_space_for_partition (GFile   *file,
+                                          GError **error)
 {
   g_autoptr(GFileInfo) info = NULL;
-  g_autoptr(GError) error = NULL;
   guint64 total = 0;
   guint64 used = 0;
   guint64 available = 0;
@@ -92,22 +115,26 @@ get_disk_space_for_partition (GFile *file)
                                        G_FILE_ATTRIBUTE_FILESYSTEM_USED ","
                                        G_FILE_ATTRIBUTE_FILESYSTEM_FREE,
                                        NULL /* cancellable */,
-                                       &error);
+                                       error);
   if (info == NULL)
     {
-      g_warning ("%s: %s", G_STRFUNC, error->message);
-    }
-  else
-    {
-      total = g_file_info_get_attribute_uint64 (info,
-                                                G_FILE_ATTRIBUTE_FILESYSTEM_SIZE);
-      used = g_file_info_get_attribute_uint64 (info,
-                                               G_FILE_ATTRIBUTE_FILESYSTEM_USED);
-      available = g_file_info_get_attribute_uint64 (info,
-                                                    G_FILE_ATTRIBUTE_FILESYSTEM_FREE);
+      /* TODO: g_file_peek_path() from GLib 2.56. */
+      g_autofree gchar *path = g_file_get_path (file);
+      g_prefix_error (error, "Couldn't get disk space for %s: ", path);
+      return NULL;
     }
 
-  return g_variant_new ("(ttt)", total, used, available);
+  total = g_file_info_get_attribute_uint64 (info,
+                                            G_FILE_ATTRIBUTE_FILESYSTEM_SIZE);
+  used = g_file_info_get_attribute_uint64 (info,
+                                           G_FILE_ATTRIBUTE_FILESYSTEM_USED);
+  available = g_file_info_get_attribute_uint64 (info,
+                                                G_FILE_ATTRIBUTE_FILESYSTEM_FREE);
+
+  return g_variant_new ("(uuu)",
+                        round_to_nearest (total, ONE_GIB_IN_BYTES),
+                        round_to_nearest (used, ONE_GIB_IN_BYTES),
+                        round_to_nearest (available, ONE_GIB_IN_BYTES));
 }
 
 static gboolean
@@ -122,6 +149,22 @@ is_mounted (GFile *file)
     g_file_info_get_attribute_boolean (info, G_FILE_ATTRIBUTE_UNIX_IS_MOUNTPOINT);
 }
 
+static void
+record_disk_space_for (GFile       *file,
+                       const gchar *event_uuid)
+{
+  GVariant *payload;
+  g_autoptr(GError) error = NULL;
+
+  payload = eins_hwinfo_get_disk_space_for_partition (file, &error);
+  if (payload == NULL)
+    g_warning ("%s", error->message);
+  else
+    emtr_event_recorder_record_event (emtr_event_recorder_get_default (),
+                                      event_uuid,
+                                      g_steal_pointer (&payload));
+}
+
 /**
  * @data: G_SOURCE_REMOVE or G_SOURCE_CONTINUE
  */
@@ -130,30 +173,32 @@ record_disk_space (gpointer data)
 {
   g_autoptr(GFile) root = g_file_new_for_path ("/");
   g_autoptr(GFile) extra = g_file_new_for_path ("/var/endless-extra");
-  GVariant *root_payload = get_disk_space_for_partition (root);
-  GVariant *extra_payload = is_mounted (extra)
-    ? get_disk_space_for_partition (extra)
-    : g_variant_new ("(ttt)", 0, 0, 0);
-  GVariant *payload = g_variant_new ("(@(ttt)@(ttt))", root_payload, extra_payload);
 
-  emtr_event_recorder_record_event (emtr_event_recorder_get_default (),
-                                    DISK_SPACE_EVENT,
-                                    g_steal_pointer (&payload));
+  record_disk_space_for (root, SYSROOT_DISK_SPACE_EVENT);
+
+  if (is_mounted (extra))
+    record_disk_space_for (extra, EXTRA_DISK_SPACE_EVENT);
 
   return GPOINTER_TO_INT (data);
+}
+
+GVariant *
+eins_hwinfo_get_ram_size (void)
+{
+  glibtop_mem mem;
+  guint32 size_mib;
+
+  glibtop_get_mem (&mem);
+  size_mib = round_to_nearest (mem.total, ONE_MIB_IN_BYTES);
+  return g_variant_new_uint32 (size_mib);
 }
 
 static gboolean
 record_ram_size (gpointer unused)
 {
-  glibtop_mem mem;
-  GVariant *payload;
-
-  glibtop_get_mem (&mem);
-  payload = g_variant_new_uint64 (mem.total);
   emtr_event_recorder_record_event (emtr_event_recorder_get_default (),
                                     RAM_SIZE_EVENT,
-                                    g_steal_pointer (&payload));
+                                    eins_hwinfo_get_ram_size ());
   return G_SOURCE_REMOVE;
 }
 

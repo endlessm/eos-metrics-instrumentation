@@ -19,10 +19,15 @@
 #pragma once
 
 #include <glib.h>
+#include <gio/gio.h>
 
 void eins_hwinfo_start (void);
 
 /* For tests */
+GVariant *eins_hwinfo_get_disk_space_for_partition (GFile   *file,
+                                                    GError **error);
+GVariant *eins_hwinfo_get_ram_size (void);
+
 GVariant *eins_hwinfo_get_cpu_info (void);
 GVariant *eins_hwinfo_parse_lscpu_json (const gchar *json_data,
                                         gssize       json_size);
