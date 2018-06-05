@@ -8,18 +8,22 @@ Build-Depends: debhelper (>= 9),
 	geoclue-2.0,
 	libflatpak-dev,
 	libglib2.0-dev,
+	libgtop2-dev,
+	libjson-glib-dev,
 	libostree-dev,
 	dh-autoreconf,
 	dh-systemd,
 	python3-dbus,
-	python3-dbusmock
+	python3-dbusmock,
+	util-linux (>= 2.32),
 
 Package: eos-metrics-instrumentation
 Section: misc
 Architecture: any
 Depends: ${shlibs:Depends}, ${misc:Depends},
 	geoclue-2.0,
-	systemd (>= 200)
+	systemd (>= 200),
+	util-linux (>= 2.32),
 Description: Metrics instrumentation for EndlessOS
  This package contains system and session daemons
  that record metrics using data collected from
