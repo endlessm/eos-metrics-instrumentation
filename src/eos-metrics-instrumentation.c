@@ -59,10 +59,10 @@
 #define UPTIME_KEY "uptime"
 #define BOOT_COUNT_KEY "boot_count"
 
-/* This is the period in seconds with which we record the total system uptime
+/* This is the period (one hour) with which we record the total system uptime
  * across all boots.
  */
-#define RECORD_UPTIME_INTERVAL (60u * 60u)
+#define RECORD_UPTIME_INTERVAL_SECONDS (60u * 60u)
 
 /*
  * Started when a user logs in and stopped when that user logs out.
@@ -494,7 +494,8 @@ record_uptime (gpointer unused)
   GVariant *uptime_payload = make_uptime_payload ();
   emtr_event_recorder_record_event (emtr_event_recorder_get_default (),
                                     UPTIME_EVENT, uptime_payload);
-  g_timeout_add_seconds (RECORD_UPTIME_INTERVAL, (GSourceFunc) record_uptime,
+  g_timeout_add_seconds (RECORD_UPTIME_INTERVAL_SECONDS,
+                         (GSourceFunc) record_uptime,
                          NULL);
   return G_SOURCE_REMOVE;
 }
@@ -1029,7 +1030,7 @@ main (gint                argc,
   g_idle_add ((GSourceFunc) record_location_label, NULL);
   g_idle_add ((GSourceFunc) record_network_id, GINT_TO_POINTER (TRUE));
   g_idle_add ((GSourceFunc) record_windows_licenses, NULL);
-  g_timeout_add_seconds (RECORD_UPTIME_INTERVAL / 2,
+  g_timeout_add_seconds (RECORD_UPTIME_INTERVAL_SECONDS / 2,
                          (GSourceFunc) record_uptime, NULL);
 
   eins_hwinfo_start ();
