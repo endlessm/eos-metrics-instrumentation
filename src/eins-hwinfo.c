@@ -370,7 +370,7 @@ GVariant *
 eins_hwinfo_get_cpu_info (void)
 {
   g_autoptr(GSubprocess) lscpu = NULL;
-  g_autoptr(GBytes) lsusb_stdout = NULL;
+  g_autoptr(GBytes) lscpu_stdout = NULL;
   g_autoptr(JsonParser) parser = json_parser_new ();
   const gchar *json_data = NULL;
   gsize json_size;
@@ -383,7 +383,7 @@ eins_hwinfo_get_cpu_info (void)
       || !g_subprocess_communicate (lscpu,
                                     NULL /* stdin */,
                                     NULL /* cancellable */,
-                                    &lsusb_stdout,
+                                    &lscpu_stdout,
                                     NULL /* stderr */,
                                     &error)
       || !g_subprocess_wait_check (lscpu, NULL /* cancellable */, &error))
@@ -392,7 +392,7 @@ eins_hwinfo_get_cpu_info (void)
       return NULL;
     }
 
-  json_data = g_bytes_get_data (lsusb_stdout, &json_size);
+  json_data = g_bytes_get_data (lscpu_stdout, &json_size);
   g_return_val_if_fail (json_size <= G_MAXSSIZE, NULL);
   return eins_hwinfo_parse_lscpu_json (json_data, (gssize) json_size);
 }
