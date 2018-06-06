@@ -225,7 +225,7 @@ test_get_cpu_info_for_current_system (void)
   g_variant_get_child (payload, 0, "(&sqd)", &model, &n_cpus, &max_mhz);
   g_assert_cmpstr (model, !=, "");
   g_assert_cmpuint (n_cpus, >, 0);
-  g_assert_cmpfloat (max_mhz, >, 0);
+  g_assert_cmpfloat (max_mhz, >=, 0);
 }
 
 int
