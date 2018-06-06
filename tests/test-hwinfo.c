@@ -130,6 +130,28 @@ static const char *NO_CPU_MAX_MHZ_VARIANT =
     "  2385.484"
     ")]";
 
+static const char *ROCKCHIP_JSON =
+    "{"
+    "   \"lscpu\": ["
+    "      {\"field\": \"Architecture:\", \"data\": \"armv7l\"},"
+    "      {\"field\": \"Byte Order:\", \"data\": \"Little Endian\"},"
+    "      {\"field\": \"CPU(s):\", \"data\": \"4\"},"
+    "      {\"field\": \"On-line CPU(s) list:\", \"data\": \"0-3\"},"
+    "      {\"field\": \"Thread(s) per core:\", \"data\": \"1\"},"
+    "      {\"field\": \"Core(s) per socket:\", \"data\": \"4\"},"
+    "      {\"field\": \"Socket(s):\", \"data\": \"1\"},"
+    "      {\"field\": \"Vendor ID:\", \"data\": \"ARM\"},"
+    "      {\"field\": \"Model:\", \"data\": \"1\"},"
+    "      {\"field\": \"Model name:\", \"data\": \"Cortex-A12\"},"
+    "      {\"field\": \"Stepping:\", \"data\": \"r0p1\"},"
+    "      {\"field\": \"CPU max MHz:\", \"data\": \"1608.0000\"},"
+    "      {\"field\": \"CPU min MHz:\", \"data\": \"126.0000\"},"
+    "      {\"field\": \"BogoMIPS:\", \"data\": \"35.82\"},"
+    "      {\"field\": \"Flags:\", \"data\": \"half thumb fastmult vfp edsp thumbee neon vfpv3 tls vfpv4 idiva idivt vfpd32 lpae evtstrm\"}"
+    "   ]"
+    "}";
+static const char *ROCKCHIP_VARIANT = "[('Cortex-A12', 4,  1608.)]";
+
 static const char *MALFORMED_JSON = "{";
 static const char *WRONG_STRUCTURE_JSON_1 = "[]";
 static const char *WRONG_STRUCTURE_JSON_2 = "{}";
@@ -203,7 +225,7 @@ test_get_cpu_info_for_current_system (void)
   g_variant_get_child (payload, 0, "(&sqd)", &model, &n_cpus, &max_mhz);
   g_assert_cmpstr (model, !=, "");
   g_assert_cmpuint (n_cpus, >, 0);
-  g_assert_cmpfloat (max_mhz, >, 0);
+  g_assert_cmpfloat (max_mhz, >=, 0);
 }
 
 int
@@ -227,6 +249,7 @@ main (int   argc,
 
       { "/hwinfo/cpu/good/xps13", XPS_13_9343_JSON, XPS_13_9343_VARIANT },
       { "/hwinfo/cpu/good/no-cpu-max-mhz", NO_CPU_MAX_MHZ_JSON, NO_CPU_MAX_MHZ_VARIANT },
+      { "/hwinfo/cpu/good/rockchip", ROCKCHIP_JSON, ROCKCHIP_VARIANT },
   };
   size_t i;
 
