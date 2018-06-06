@@ -74,7 +74,10 @@
  * ------+--------+--------------------------+-------------------
  *     0 | string | Human-readable CPU model | ''
  *     1 | uint16 | Number of cores/threads  | 0
- *     2 | double | Maximum speed in MHz     | 0.
+ *     2 | double | Maximum¹ speed in MHz    | 0.
+ *
+ * ¹ If the maximum speed can't be determined, we report the current speed
+ *   instead, if known.
  *
  * For example, a laptop fitted with an i7-5500U (which has 2 physical cores,
  * each with 2 threads) will be reported as:
