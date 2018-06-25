@@ -51,7 +51,6 @@ test_get_disk_space_for_nonexistent_dir (void)
   g_autoptr(GFile) nonexistent = NULL;
   g_autoptr(GVariant) payload = NULL;
   g_autoptr(GError) error = NULL;
-  guint32 total, used, available;
 
   nonexistent = g_file_new_for_path ("/ca29d735-ca59-4774-8677-5bf3e9f34a7e");
 

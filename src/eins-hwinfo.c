@@ -55,6 +55,13 @@
 /* One day */
 #define RECORD_DISK_SPACE_INTERVAL_SECONDS (60u * 60u * 24u)
 
+/* The presence of this file indicates that the first-boot resize of the root
+ * filesystem is complete.
+ *
+ * https://github.com/endlessm/eos-boot-helper/blob/master/eos-firstboot
+ */
+#define BOOTED_FLAG_FILE_PATH "/var/eos-booted"
+
 #define ONE_GIB_IN_BYTES (G_GUINT64_CONSTANT (1024 * 1024 * 1024))
 
 /*
@@ -168,11 +175,8 @@ record_disk_space_for (GFile       *file,
                                       g_steal_pointer (&payload));
 }
 
-/**
- * @data: G_SOURCE_REMOVE or G_SOURCE_CONTINUE
- */
 static gboolean
-record_disk_space (gpointer data)
+record_disk_space (gpointer unused)
 {
   g_autoptr(GFile) root = g_file_new_for_path ("/");
   g_autoptr(GFile) extra = g_file_new_for_path ("/var/endless-extra");
@@ -182,7 +186,68 @@ record_disk_space (gpointer data)
   if (is_mounted (extra))
     record_disk_space_for (extra, EXTRA_DISK_SPACE_EVENT);
 
-  return GPOINTER_TO_INT (data);
+  return G_SOURCE_CONTINUE;
+}
+
+static void
+start_recording_disk_space (void)
+{
+  record_disk_space (NULL);
+  g_timeout_add_seconds (RECORD_DISK_SPACE_INTERVAL_SECONDS, record_disk_space,
+                         NULL);
+}
+
+static void
+boot_finished_cb (GFileMonitor     *monitor,
+                  GFile            *booted,
+                  GFile            *other_file,
+                  GFileMonitorEvent event_type,
+                  gpointer          user_data)
+{
+  /* Any event will do */
+  g_debug ("got (GFileMonitorEvent) %d for %s", event_type, BOOTED_FLAG_FILE_PATH);
+  start_recording_disk_space ();
+
+  g_signal_handlers_disconnect_by_func (monitor, boot_finished_cb, NULL);
+  g_object_unref (monitor);
+}
+
+/* On the first boot, the root partition is extended to fill the disk, in the
+ * background. We may be running before this process has completed; in that
+ * case, we need to wait. Rather than monitoring eos-firstboot.service via
+ * systemd's D-Bus API, we look for a flag file in /var.
+ */
+static gboolean
+start_recording_disk_space_when_booted (gpointer data)
+{
+  g_autoptr(GFile) booted = g_file_new_for_path (BOOTED_FLAG_FILE_PATH);
+  g_autoptr(GFileMonitor) monitor = NULL;
+  g_autoptr(GError) error = NULL;
+
+  if (g_file_query_exists (booted, NULL))
+    {
+      g_debug ("%s already exists", BOOTED_FLAG_FILE_PATH);
+      start_recording_disk_space ();
+    }
+  else if (!(monitor = g_file_monitor_file (booted, G_FILE_MONITOR_NONE,
+                                            NULL, &error)))
+    {
+      g_warning ("Couldn't watch %s: %s",
+                 BOOTED_FLAG_FILE_PATH, error->message);
+      start_recording_disk_space ();
+    }
+  else
+    {
+      g_debug ("Waiting for %s to appear before reporting disk space",
+               BOOTED_FLAG_FILE_PATH);
+
+      /* Ownership is transferred to boot_finished_cb() */
+      g_signal_connect (g_steal_pointer (&monitor), "changed",
+                        (GCallback) boot_finished_cb,
+                        NULL);
+    }
+
+  return G_SOURCE_REMOVE;
 }
 
 GVariant *
@@ -378,7 +443,6 @@ eins_hwinfo_get_cpu_info (void)
   const gchar *json_data = NULL;
   gsize json_size;
   g_autoptr(GError) error = NULL;
-  size_t i;
 
   lscpu = g_subprocess_new (G_SUBPROCESS_FLAGS_STDOUT_PIPE, &error,
                             "lscpu", "--json", NULL);
@@ -415,10 +479,7 @@ record_cpu_models (gpointer unused)
 void
 eins_hwinfo_start (void)
 {
-  g_idle_add (record_disk_space, GINT_TO_POINTER (G_SOURCE_REMOVE));
-  g_timeout_add_seconds (RECORD_DISK_SPACE_INTERVAL_SECONDS, record_disk_space,
-                         GINT_TO_POINTER (G_SOURCE_CONTINUE));
-
+  g_idle_add (start_recording_disk_space_when_booted, NULL);
   g_idle_add (record_ram_size, NULL);
   g_idle_add (record_cpu_models, NULL);
 }
