@@ -443,7 +443,6 @@ eins_hwinfo_get_cpu_info (void)
   const gchar *json_data = NULL;
   gsize json_size;
   g_autoptr(GError) error = NULL;
-  size_t i;
 
   lscpu = g_subprocess_new (G_SUBPROCESS_FLAGS_STDOUT_PIPE, &error,
                             "lscpu", "--json", NULL);
