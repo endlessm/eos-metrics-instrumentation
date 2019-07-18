@@ -43,6 +43,7 @@ src_eos_metrics_instrumentation_SOURCES = \
 
 # Pre-processor flags
 src_eos_metrics_instrumentation_CPPFLAGS = \
+	-I$(top_builddir)/src \
 	$(EOS_INSTRUMENTATION_CFLAGS) \
 	-DINSTRUMENTATION_CACHE_DIR="\"$(instrumentationcachedir)\"" \
 	-DSYSCONFDIR="\"$(sysconfdir)\"" \
