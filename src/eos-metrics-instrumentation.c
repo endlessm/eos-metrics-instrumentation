@@ -895,6 +895,14 @@ record_network_id (gpointer force_ptr)
 {
   gboolean force = GPOINTER_TO_INT (force_ptr);
   guint32 network_id;
+  g_autofree char *image_version = get_image_version ();
+
+  /* Network ID is only needed for analysis on Solutions images */
+  if (!g_str_has_prefix (image_version, "solutions-"))
+    {
+      g_message ("Not recording network ID as this is not a Solutions system");
+      return G_SOURCE_REMOVE;
+    }
 
   if (!eins_network_id_get (&network_id))
     {
