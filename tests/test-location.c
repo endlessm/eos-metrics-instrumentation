@@ -1,4 +1,4 @@
-/* Copyright 2014, 2015 Endless Mobile, Inc. */
+/* Copyright 2019 Endless Mobile, Inc. */
 
 /* This file is part of eos-metrics-instrumentation.
  *
@@ -17,11 +17,16 @@
  * <http://www.gnu.org/licenses/>.
  */
 
-#ifndef EINS_LOCATION_H
-#define EINS_LOCATION_H
-
 #include <glib.h>
 
-gboolean record_location_metric (const char *image_version);
+#include "eins-location.h"
 
-#endif /* EINS_LOCATION_H */
+gint
+main (gint                argc,
+      const gchar * const argv[])
+{
+  g_autoptr(GMainLoop) main_loop = g_main_loop_new (NULL, TRUE);
+  g_idle_add ((GSourceFunc) record_location_metric, "solutions-fake-image");
+  g_main_loop_run (main_loop);
+  return EXIT_SUCCESS;
+}

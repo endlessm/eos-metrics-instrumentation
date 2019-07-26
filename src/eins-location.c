@@ -180,13 +180,20 @@ on_manager_proxy_ready (GObject      *obj,
 /*
  * record_location_metric:
  *
- * Access GeoClue to record the user's location.
+ * Access GeoClue to record the user's location, on Solutions systems only.
  *
  * Returns: %G_SOURCE_REMOVE for use as an idle function.
  */
 gboolean
-record_location_metric (void)
+record_location_metric (const char *image_version)
 {
+  /* Location is only needed for analysis on Solutions images */
+  if (!image_version || !g_str_has_prefix (image_version, "solutions-"))
+    {
+      g_message ("Not recording location as this is not a Solutions system");
+      return G_SOURCE_REMOVE;
+    }
+
   geoclue_manager_proxy_new_for_bus (G_BUS_TYPE_SYSTEM,
                                      G_DBUS_PROXY_FLAGS_NONE,
                                      "org.freedesktop.GeoClue2",

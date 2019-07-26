@@ -1039,7 +1039,7 @@ main (gint                argc,
 
   GMainLoop *main_loop = g_main_loop_new (NULL, TRUE);
 
-  g_idle_add ((GSourceFunc) record_location_metric, NULL);
+  g_idle_add ((GSourceFunc) record_location_metric, image_version);
   g_idle_add ((GSourceFunc) record_os_version, NULL);
   g_idle_add ((GSourceFunc) increment_boot_count, NULL);
   g_idle_add ((GSourceFunc) record_live_boot, NULL);
