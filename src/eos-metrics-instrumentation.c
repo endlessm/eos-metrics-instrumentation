@@ -364,12 +364,8 @@ get_image_version (void)
 }
 
 static gboolean
-record_image_version (gpointer unused)
+record_image_version (const char *image_version)
 {
-  g_autofree gchar *image_version = NULL;
-
-  image_version = get_image_version ();
-
   if (image_version != NULL)
     emtr_event_recorder_record_event (emtr_event_recorder_get_default (),
                                       EOS_IMAGE_VERSION_EVENT,
@@ -890,24 +886,21 @@ location_file_monitor_new (void)
   return g_steal_pointer (&monitor);
 }
 
-static gboolean
-record_network_id (gpointer force_ptr)
+static void
+record_network_id_impl (const char *image_version,
+                        gboolean force)
 {
-  gboolean force = GPOINTER_TO_INT (force_ptr);
   guint32 network_id;
-  g_autofree char *image_version = get_image_version ();
 
   /* Network ID is only needed for analysis on Solutions images */
-  if (!g_str_has_prefix (image_version, "solutions-"))
+  if (!image_version || !g_str_has_prefix (image_version, "solutions-"))
     {
       g_message ("Not recording network ID as this is not a Solutions system");
-      return G_SOURCE_REMOVE;
+      return;
     }
 
   if (!eins_network_id_get (&network_id))
-    {
-      return G_SOURCE_REMOVE;
-    }
+    return;
 
   if (network_id != previous_network_id || force)
     {
@@ -919,7 +912,19 @@ record_network_id (gpointer force_ptr)
 
       previous_network_id = network_id;
     }
+}
 
+static gboolean
+record_network_id_force (const char *image_version)
+{
+  record_network_id_impl (image_version, TRUE);
+  return G_SOURCE_REMOVE;
+}
+
+static gboolean
+record_network_id (const char *image_version)
+{
+  record_network_id_impl (image_version, FALSE);
   return G_SOURCE_REMOVE;
 }
 
@@ -931,7 +936,7 @@ record_network_change (GDBusProxy *dbus_proxy,
                        gchar      *sender_name,
                        gchar      *signal_name,
                        GVariant   *parameters,
-                       gpointer    user_data)
+                       const char *image_version)
 {
   if (strcmp ("StateChanged", signal_name) == 0)
     {
@@ -948,7 +953,8 @@ record_network_change (GDBusProxy *dbus_proxy,
       /* schedule recording the network ID provided we have a default route */
       if (new_network_state >= NM_STATE_CONNECTED_SITE)
         {
-          g_idle_add ((GSourceFunc) record_network_id, GINT_TO_POINTER (FALSE));
+          g_idle_add ((GSourceFunc) record_network_id,
+                      (gpointer) image_version);
         }
 
       previous_network_state = new_network_state;
@@ -956,7 +962,7 @@ record_network_change (GDBusProxy *dbus_proxy,
 }
 
 static GDBusProxy *
-network_dbus_proxy_new (void)
+network_dbus_proxy_new (const char *image_version)
 {
   GError *error = NULL;
   GDBusProxy *dbus_proxy =
@@ -976,7 +982,8 @@ network_dbus_proxy_new (void)
   else
     {
       g_signal_connect (dbus_proxy, "g-signal",
-                        G_CALLBACK (record_network_change), NULL /* data */);
+                        G_CALLBACK (record_network_change),
+                        (gpointer) image_version);
     }
   return dbus_proxy;
 }
@@ -1023,20 +1030,22 @@ main (gint                argc,
   prev_time_set = emtr_util_get_current_time (CLOCK_MONOTONIC, &prev_time);
   g_datalist_init (&humanity_by_session_id);
 
+  g_autofree char *image_version = get_image_version ();
+
   GDBusProxy *systemd_dbus_proxy = systemd_dbus_proxy_new ();
   GDBusProxy *login_dbus_proxy = login_dbus_proxy_new ();
-  GDBusProxy *network_dbus_proxy = network_dbus_proxy_new ();
+  GDBusProxy *network_dbus_proxy = network_dbus_proxy_new (image_version);
   GFileMonitor *location_file_monitor = location_file_monitor_new ();
 
   GMainLoop *main_loop = g_main_loop_new (NULL, TRUE);
 
-  g_idle_add ((GSourceFunc) record_location_metric, NULL);
+  g_idle_add ((GSourceFunc) record_location_metric, image_version);
   g_idle_add ((GSourceFunc) record_os_version, NULL);
   g_idle_add ((GSourceFunc) increment_boot_count, NULL);
   g_idle_add ((GSourceFunc) record_live_boot, NULL);
-  g_idle_add ((GSourceFunc) record_image_version, NULL);
+  g_idle_add ((GSourceFunc) record_image_version, image_version);
   g_idle_add ((GSourceFunc) record_location_label, NULL);
-  g_idle_add ((GSourceFunc) record_network_id, GINT_TO_POINTER (TRUE));
+  g_idle_add ((GSourceFunc) record_network_id_force, image_version);
   g_idle_add ((GSourceFunc) record_windows_licenses, NULL);
   g_timeout_add_seconds (RECORD_UPTIME_INTERVAL_SECONDS / 2,
                          (GSourceFunc) record_uptime, NULL);

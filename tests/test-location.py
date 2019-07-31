@@ -131,7 +131,7 @@ class TestLocationIntegration(dbusmock.DBusTestCase):
         self._quit_on_uuid = None
         self._event_args = None
 
-        self.daemon = subprocess.Popen('./src/eos-metrics-instrumentation')
+        self.daemon = subprocess.Popen('./tests/test-location')
 
     def tearDown(self):
         self.dbus_con.remove_signal_receiver(self.handle_dbus_event_received,
@@ -147,6 +147,11 @@ class TestLocationIntegration(dbusmock.DBusTestCase):
         self.geoclue_popen.wait()
         self.metrics_popen.wait()
 
+    def timeout(self, message=None):
+        self.mainloop.quit()
+        self.fail(message)
+        return GLib.SOURCE_REMOVE
+
     def quit_on(self, method_name):
         """Quit the main loop when the DBus method @method_name is called.
         Timeout after waiting for 20 seconds. Use like this:
@@ -155,7 +160,7 @@ class TestLocationIntegration(dbusmock.DBusTestCase):
             # Now MyMethod has been called.
         """
         self._quit_on_method = method_name
-        GLib.timeout_add_seconds(20, self.fail, 'Test timed out after ' +
+        GLib.timeout_add_seconds(20, self.timeout, 'Test timed out after ' +
                                  'waiting 20 seconds for D-Bus method call.')
 
     def quit_on_singular_event(self, event_uuid):

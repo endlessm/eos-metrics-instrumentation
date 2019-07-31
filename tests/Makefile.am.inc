@@ -18,6 +18,7 @@
 
 noinst_PROGRAMS += \
 	tests/test-hwinfo \
+	tests/test-location \
 	tests/test-persistent-tally \
 	$(NULL)
 
@@ -33,6 +34,7 @@ PY_LOG_COMPILER = python3
 TEST_FLAGS = \
 	@EOS_INSTRUMENTATION_CFLAGS@ \
 	-I$(top_srcdir)/src \
+	-I$(top_builddir)/src \
 	-DINSTRUMENTATION_CACHE_DIR="\"$(instrumentationcachedir)\"" \
 	$(NULL)
 TEST_LIBS = @EOS_INSTRUMENTATION_LIBS@
@@ -56,6 +58,14 @@ tests_test_hwinfo_SOURCES = \
 tests_test_hwinfo_CPPFLAGS = $(TEST_FLAGS)
 
 tests_test_hwinfo_LDADD = $(TEST_LIBS)
+
+tests_test_location_SOURCES = \
+	src/eins-location.c src/eins-location.h \
+	src/geoclue.c \
+	tests/test-location.c \
+	$(NULL)
+tests_test_location_CPPFLAGS = $(TEST_FLAGS)
+tests_test_location_LDADD = $(TEST_LIBS)
 
 EXTRA_DIST += tests/test-location.py
 
