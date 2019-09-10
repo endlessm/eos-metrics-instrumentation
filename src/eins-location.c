@@ -188,7 +188,10 @@ gboolean
 record_location_metric (const char *image_version)
 {
   /* Location is only needed for analysis on Solutions images */
-  if (!image_version || !g_str_has_prefix (image_version, "solutions-"))
+  if (!image_version ||
+      !(g_str_has_prefix (image_version, "fnde-") ||
+        g_str_has_prefix (image_version, "impact-") ||
+        g_str_has_prefix (image_version, "solutions-")))
     {
       g_message ("Not recording location as this is not a Solutions system");
       return G_SOURCE_REMOVE;
