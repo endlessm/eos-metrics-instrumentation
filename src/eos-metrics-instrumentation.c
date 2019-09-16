@@ -893,7 +893,10 @@ record_network_id_impl (const char *image_version,
   guint32 network_id;
 
   /* Network ID is only needed for analysis on Solutions images */
-  if (!image_version || !g_str_has_prefix (image_version, "solutions-"))
+  if (!image_version ||
+      !(g_str_has_prefix (image_version, "fnde-") ||
+        g_str_has_prefix (image_version, "impact-") ||
+        g_str_has_prefix (image_version, "solutions-")))
     {
       g_message ("Not recording network ID as this is not a Solutions system");
       return;
