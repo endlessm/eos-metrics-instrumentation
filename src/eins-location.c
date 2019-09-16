@@ -180,20 +180,20 @@ on_manager_proxy_ready (GObject      *obj,
 /*
  * record_location_metric:
  *
- * Access GeoClue to record the user's location, on Solutions systems only.
+ * Access GeoClue to record the user's location, on certain partner images only.
  *
  * Returns: %G_SOURCE_REMOVE for use as an idle function.
  */
 gboolean
 record_location_metric (const char *image_version)
 {
-  /* Location is only needed for analysis on Solutions images */
+  /* Location is only needed for analysis on certain partner images */
   if (!image_version ||
       !(g_str_has_prefix (image_version, "fnde-") ||
         g_str_has_prefix (image_version, "impact-") ||
         g_str_has_prefix (image_version, "solutions-")))
     {
-      g_message ("Not recording location as this is not a Solutions system");
+      g_message ("Not recording location as it is not required for this image");
       return G_SOURCE_REMOVE;
     }
 
