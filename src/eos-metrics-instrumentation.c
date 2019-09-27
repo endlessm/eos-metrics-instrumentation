@@ -49,13 +49,6 @@
  */
 #define UPTIME_EVENT "9af2cc74-d6dd-423f-ac44-600a6eee2d96"
 
-/*
- * Recorded when eos-metrics-instrumentation receives the SIGTERM signal, which
- * should generally correspond to system shutdown. The auxiliary payload is the
- * same as that of the uptime event.
- */
-#define SHUTDOWN_EVENT "8f70276e-3f78-45b2-99f8-94db231d42dd"
-
 #define UPTIME_KEY "uptime"
 #define BOOT_COUNT_KEY "boot_count"
 
@@ -482,7 +475,7 @@ make_uptime_payload (void)
 
 /* Intended for use as a GSourceFunc callback. Records an uptime event. Reports
  * the running uptime tally that spans across boots and the boot count as the
- * auxiliary payload of the system shutdown event.
+ * auxiliary payload of the uptime event.
  */
 static gboolean
 record_uptime (gpointer unused)
@@ -494,20 +487,6 @@ record_uptime (gpointer unused)
                          (GSourceFunc) record_uptime,
                          NULL);
   return G_SOURCE_REMOVE;
-}
-
-/* Records a system shutdown event. Reports the running uptime tally that spans
- * across boots and the boot count as the auxiliary payload of the system
- * shutdown event.
- */
-static void
-record_shutdown (void)
-{
-  GVariant *uptime_payload = make_uptime_payload ();
-  emtr_event_recorder_record_event_sync (emtr_event_recorder_get_default (),
-                                         SHUTDOWN_EVENT, uptime_payload);
-
-  g_object_unref (persistent_tally);
 }
 
 /*
@@ -1064,7 +1043,6 @@ main (gint                argc,
   g_main_loop_run (main_loop);
 
   record_logout_for_all_remaining_sessions ();
-  record_shutdown ();
 
   g_main_loop_unref (main_loop);
   g_clear_object (&systemd_dbus_proxy);
