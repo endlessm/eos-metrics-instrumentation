@@ -191,7 +191,9 @@ record_location_metric (const char *image_version)
   if (!image_version ||
       !(g_str_has_prefix (image_version, "fnde-") ||
         g_str_has_prefix (image_version, "impact-") ||
-        g_str_has_prefix (image_version, "solutions-")))
+        g_str_has_prefix (image_version, "payg-") ||
+        g_str_has_prefix (image_version, "solutions-") ||
+        g_str_has_prefix (image_version, "spark-")))
     {
       g_message ("Not recording location as it is not required for this image");
       return G_SOURCE_REMOVE;
