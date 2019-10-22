@@ -86,17 +86,6 @@
  */
 #define NETWORK_ID_EVENT "38eb48f8-e131-9b57-77c6-35e0590c82fd"
 
-/*
- * Recorded when the network changes from one of the states described at
- * https://developer.gnome.org/NetworkManager/unstable/spec.html#type-NM_STATE
- * to another. The auxiliary payload is a 2-tuple of the form
- * (previous_network_state, new_network_state). Since events are delivered on a
- * best-effort basis, there is no guarantee that the new network state of the
- * previous successfully recorded network status change event matches the
- * previous network state of the current network status change event.
- */
-#define NETWORK_STATUS_CHANGED_EVENT "5fae6179-e108-4962-83be-c909259c0584"
-
 /* Recorded at every startup to track deployment statistics. The auxiliary
  * payload is a 3-tuple of the form (os_name, os_version, eos_personality).
  * From 3.2.0 the personality is always reported as "" because the image
@@ -173,7 +162,6 @@ static EinsPersistentTally *persistent_tally;
 static GData *humanity_by_session_id;
 
 static guint32 previous_network_id = 0;
-static guint32 previous_network_state = 0; // NM_STATE_UNKNOWM
 
 static gboolean
 get_os_version (gchar **name_out,
@@ -925,21 +913,12 @@ record_network_change (GDBusProxy *dbus_proxy,
       guint32 new_network_state;
       g_variant_get (parameters, "(u)", &new_network_state);
 
-      GVariant *status_change = g_variant_new ("(uu)", previous_network_state,
-                                               new_network_state);
-
-      emtr_event_recorder_record_event (emtr_event_recorder_get_default (),
-                                        NETWORK_STATUS_CHANGED_EVENT,
-                                        status_change);
-
       /* schedule recording the network ID provided we have a default route */
       if (new_network_state >= NM_STATE_CONNECTED_SITE)
         {
           g_idle_add ((GSourceFunc) record_network_id,
                       (gpointer) image_version);
         }
-
-      previous_network_state = new_network_state;
     }
 }
 
