@@ -266,7 +266,6 @@ check_cmdline (gboolean *is_live_boot,
   if (!g_file_get_contents (KERNEL_CMDLINE_PATH, &cmdline, NULL, &error))
     {
       g_warning ("Error reading " KERNEL_CMDLINE_PATH ": %s", error->message);
-      g_error_free (error);
     }
   else if (g_regex_match_simple (LIVE_BOOT_FLAG_REGEX, cmdline, 0, 0))
     {
