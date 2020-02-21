@@ -17,8 +17,10 @@
  * <http://www.gnu.org/licenses/>.
  */
 
+#include <errno.h>
 #include <string.h>
 #include <stdlib.h>
+#include <sys/utsname.h>
 
 #include <flatpak.h>
 #include <ostree.h>
@@ -57,6 +59,7 @@ static void
 report_crash (const char *binary,
               gint16 signal,
               gint64 timestamp,
+              const char *arch,
               const char *ostree_commit,
               const char *ostree_url,
               const char *ostree_version,
@@ -70,6 +73,7 @@ report_crash (const char *binary,
   g_variant_dict_insert_value (&dict, "binary", g_variant_new_string (binary));
   g_variant_dict_insert_value (&dict, "signal", g_variant_new_int16 (signal));
   g_variant_dict_insert_value (&dict, "timestamp", g_variant_new_int16 (timestamp));
+  g_variant_dict_insert_value (&dict, "arch", g_variant_new_string (arch));
   g_variant_dict_insert_value (&dict, "ostree_commit", g_variant_new_string (ostree_commit));
   g_variant_dict_insert_value (&dict, "ostree_url", g_variant_new_string (ostree_url));
   if (ostree_version != NULL)
@@ -299,6 +303,7 @@ main (int argc, char **argv)
   g_autoptr(FlatpakInfo) flatpak_info = NULL;
   g_autofree char *app_url = NULL;
   g_autofree char *runtime_url = NULL;
+  struct utsname name;
 
   if (argc != EXPECTED_NUMBER_ARGS + 1)
     {
@@ -347,6 +352,12 @@ main (int argc, char **argv)
         }
     }
 
+  if (uname (&name) < 0)
+    {
+      g_warning ("uname() failed: %s", g_strerror (errno));
+      return EXIT_FAILURE;
+    }
+
   ostree_url = get_ostree_repo_url (repo, "eos");
 
   if (!ostree_url || !get_eos_ostree_deployment_commit (sysroot, repo, &ostree_commit, &ostree_version))
@@ -355,7 +366,7 @@ main (int argc, char **argv)
       return EXIT_FAILURE;
     }
 
-  report_crash (path, signal, timestamp, ostree_commit, ostree_url, ostree_version, flatpak_info, app_url, runtime_url);
+  report_crash (path, signal, timestamp, name.machine, ostree_commit, ostree_url, ostree_version, flatpak_info, app_url, runtime_url);
 
   return EXIT_SUCCESS;
 }
