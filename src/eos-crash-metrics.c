@@ -1,4 +1,4 @@
-/* Copyright © 2017–2020 Endless Mobile, Inc.
+/* Copyright © 2017, 2020 Endless Mobile, Inc.
  *
  * This file is part of eos-metrics-instrumentation.
  *
@@ -59,6 +59,7 @@ report_crash (const char *binary,
               gint64 timestamp,
               const char *ostree_commit,
               const char *ostree_url,
+              const char *ostree_version,
               const FlatpakInfo *info,
               const char *app_url,
               const char *runtime_url)
@@ -71,6 +72,8 @@ report_crash (const char *binary,
   g_variant_dict_insert_value (&dict, "timestamp", g_variant_new_int16 (timestamp));
   g_variant_dict_insert_value (&dict, "ostree_commit", g_variant_new_string (ostree_commit));
   g_variant_dict_insert_value (&dict, "ostree_url", g_variant_new_string (ostree_url));
+  if (ostree_version != NULL)
+    g_variant_dict_insert_value (&dict, "ostree_version", g_variant_new_string (ostree_version));
 
   if (info != NULL)
     {
@@ -120,20 +123,42 @@ get_ostree_repo_url (OstreeRepo *repo, const char *origin)
   return url;
 }
 
-static char *
-get_eos_ostree_deployment_commit (OstreeSysroot *sysroot, OstreeRepo *repo)
+static gboolean
+get_eos_ostree_deployment_commit (OstreeSysroot *sysroot,
+                                  OstreeRepo    *repo,
+                                  char         **commit_out,
+                                  char         **version_out)
 {
   OstreeDeployment *deployment = ostree_sysroot_get_booted_deployment (sysroot);
   const char *csum = NULL;
+  g_autoptr(GVariant) commit = NULL;
+  g_autoptr(GVariant) commit_metadata = NULL;
+  const char *version = NULL;
+
+  g_return_val_if_fail (commit_out == NULL || *commit_out == NULL, FALSE);
+  g_return_val_if_fail (version_out == NULL || *version_out == NULL, FALSE);
 
   if (!deployment)
     {
       g_warning ("OSTree deployment is not currently booted, cannot read state");
-      return NULL;
+      return FALSE;
     }
 
   csum = ostree_deployment_get_csum (deployment);
-  return g_strdup (csum);
+
+  /* Load the backing commit; shouldn't normally fail, but if it does,
+   * we stumble on.
+   */
+  if (ostree_repo_load_variant (repo, OSTREE_OBJECT_TYPE_COMMIT, csum,
+                                &commit, NULL))
+    commit_metadata = g_variant_get_child_value (commit, 0);
+
+  if (commit_metadata)
+    (void) g_variant_lookup (commit_metadata, OSTREE_COMMIT_META_KEY_VERSION, "&s", &version);
+
+  *commit_out = g_strdup (csum);
+  *version_out = g_strdup (version);
+  return TRUE;
 }
 
 static const char *blacklisted_prefixes[] =
@@ -270,6 +295,7 @@ main (int argc, char **argv)
   g_autoptr(GError) error = NULL;
   g_autofree char *ostree_url = NULL;
   g_autofree char *ostree_commit = NULL;
+  g_autofree char *ostree_version = NULL;
   g_autoptr(FlatpakInfo) flatpak_info = NULL;
   g_autofree char *app_url = NULL;
   g_autofree char *runtime_url = NULL;
@@ -322,15 +348,14 @@ main (int argc, char **argv)
     }
 
   ostree_url = get_ostree_repo_url (repo, "eos");
-  ostree_commit = get_eos_ostree_deployment_commit (sysroot, repo);
 
-  if (!ostree_url || !ostree_commit)
+  if (!ostree_url || !get_eos_ostree_deployment_commit (sysroot, repo, &ostree_commit, &ostree_version))
     {
       g_warning ("Unable to get OSTree url or commit, perhaps the system has been tampered with?");
       return EXIT_FAILURE;
     }
 
-  report_crash (path, signal, timestamp, ostree_commit, ostree_url, flatpak_info, app_url, runtime_url);
+  report_crash (path, signal, timestamp, ostree_commit, ostree_url, ostree_version, flatpak_info, app_url, runtime_url);
 
   return EXIT_SUCCESS;
 }
