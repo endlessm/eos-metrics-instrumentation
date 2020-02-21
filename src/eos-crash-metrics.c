@@ -1,4 +1,4 @@
-/* Copyright 2017 Endless Mobile, Inc.
+/* Copyright © 2017–2020 Endless Mobile, Inc.
  *
  * This file is part of eos-metrics-instrumentation.
  *
@@ -124,10 +124,7 @@ static char *
 get_eos_ostree_deployment_commit (OstreeSysroot *sysroot, OstreeRepo *repo)
 {
   OstreeDeployment *deployment = ostree_sysroot_get_booted_deployment (sysroot);
-  GKeyFile *config = NULL;
-  g_autoptr(GError) error = NULL;
-  g_autofree char *refspec = NULL;
-  char *commit = NULL;
+  const char *csum = NULL;
 
   if (!deployment)
     {
@@ -135,21 +132,8 @@ get_eos_ostree_deployment_commit (OstreeSysroot *sysroot, OstreeRepo *repo)
       return NULL;
     }
 
-  config = ostree_deployment_get_origin (deployment);
-
-  if (!(refspec = g_key_file_get_string (config, "origin", "refspec", &error)))
-    {
-      g_warning ("Unable to read OSTree refspec for booted deployment: %s", error->message);
-      return NULL;
-    }
-
-  if (!ostree_repo_resolve_rev (repo, refspec, FALSE, &commit, &error))
-    {
-      g_warning ("Unable to resolve revision for refpsec %s: %s", refspec, error->message);
-      return NULL;
-    }
-
-  return commit;
+  csum = ostree_deployment_get_csum (deployment);
+  return g_strdup (csum);
 }
 
 static const char *blacklisted_prefixes[] =
