@@ -164,91 +164,22 @@ static GData *humanity_by_session_id;
 static guint32 previous_network_id = 0;
 
 static gboolean
-get_os_version (gchar **name_out,
-                gchar **version_out)
-{
-  GError *error = NULL;
-  gboolean succeeded = FALSE;
-  gchar *name = NULL;
-  gchar *version = NULL;
-
-  GFile *os_release_file = g_file_new_for_path (OS_RELEASE_FILE);
-  GFileInputStream *file_stream =
-    g_file_read (os_release_file, NULL, &error);
-  g_object_unref (os_release_file);
-
-  if (error)
-    goto out;
-
-  GDataInputStream *data_stream =
-    g_data_input_stream_new (G_INPUT_STREAM (file_stream));
-  g_object_unref (file_stream);
-
-  while (!name || !version)
-    {
-      gchar *line =
-        g_data_input_stream_read_line (data_stream, NULL, NULL, &error);
-      if (!line)
-        break;
-
-      if (g_str_has_prefix (line, "NAME="))
-        name = line;
-      else if (g_str_has_prefix (line, "VERSION="))
-        version = line;
-      else
-        g_free (line);
-    }
-
-  g_object_unref (data_stream);
-
-  if (error)
-    goto out;
-
-  if (!name || !version)
-    {
-      g_warning ("Could not find at least one of NAME or VERSION keys in "
-                 OS_RELEASE_FILE ".");
-      goto out;
-    }
-
-  /* According to os-release(5), these values can be quoted, escaped,
-   * etc. For simplicity, instead of doing the parsing on the client
-   * side, we do it on the server side.
-   */
-  *name_out = g_strdup (name + strlen ("NAME="));
-  *version_out = g_strdup (version + strlen ("VERSION="));
-
-  succeeded = TRUE;
-
-out:
-  if (error)
-    {
-      g_warning ("Error reading " OS_RELEASE_FILE ": %s.", error->message);
-      g_error_free (error);
-    }
-
-  g_free (name);
-  g_free (version);
-
-  return succeeded;
-}
-
-static gboolean
 record_os_version (gpointer unused)
 {
-  gchar *os_name = NULL;
-  gchar *os_version = NULL;
+  g_autofree gchar *os_name = g_get_os_info (G_OS_INFO_KEY_NAME);
+  g_autofree gchar *os_version = g_get_os_info (G_OS_INFO_KEY_VERSION);
 
-  if (!get_os_version (&os_name, &os_version))
-    return G_SOURCE_REMOVE;
+  if (os_name == NULL || os_version == NULL)
+    {
+      g_warning ("%s: Could not find at least one of NAME or VERSION",
+                 G_STRFUNC);
+      return G_SOURCE_REMOVE;
+    }
 
   GVariant *payload = g_variant_new ("(sss)",
                                      os_name, os_version, "");
   emtr_event_recorder_record_event (emtr_event_recorder_get_default (),
                                     OS_VERSION_EVENT, payload);
-
-  g_free (os_name);
-  g_free (os_version);
 
   return G_SOURCE_REMOVE;
 }
