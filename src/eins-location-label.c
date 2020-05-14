@@ -41,7 +41,6 @@ build_location_label_event (GKeyFile *kf)
   if (keys == NULL || *keys == NULL)
     return NULL;
 
-  g_autoptr (GString) label = g_string_new ("");
   g_auto (GVariantBuilder) builder = G_VARIANT_BUILDER_INIT (G_VARIANT_TYPE_ARRAY);
   for (GStrv cur = keys; *cur != NULL; cur++)
     {
@@ -51,14 +50,9 @@ build_location_label_event (GKeyFile *kf)
       if (val == NULL)
         continue;
 
-      if (cur != keys)
-        g_string_append (label, ", ");
-
       g_variant_builder_add (&builder, "{ss}", key, val);
-      g_string_append_printf (label, "\"%s\" = \"%s\"", key, val);
     }
 
-  g_message ("Recording location label: %s", label->str);
   return g_variant_builder_end (&builder);
 }
 
@@ -82,6 +76,8 @@ record_location_label (gpointer unused)
   GVariant *payload = build_location_label_event (kf);
   if (payload != NULL)
     {
+      g_autofree gchar *label = g_variant_print (payload, FALSE /* type_annotate */);
+      g_message ("Recording location label: %s", label);
       emtr_event_recorder_record_event (emtr_event_recorder_get_default (),
                                         LOCATION_LABEL_EVENT,
                                         payload);
