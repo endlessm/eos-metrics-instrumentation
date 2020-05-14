@@ -34,26 +34,12 @@
 #define LOCATION_CONF_FILE SYSCONFDIR "/metrics/location.conf"
 #define LOCATION_LABEL_GROUP "Label"
 
-gboolean
-record_location_label (gpointer unused)
+GVariant *
+build_location_label_event (GKeyFile *kf)
 {
-  g_autoptr (GError) err = NULL;
-  g_autoptr (GKeyFile) kf = g_key_file_new ();
-
-  if (!g_key_file_load_from_file (kf, LOCATION_CONF_FILE, G_KEY_FILE_NONE, &err))
-    {
-      /* this file’s existence is optional, so not found is not an error */
-      if (g_error_matches (err, G_KEY_FILE_ERROR, G_KEY_FILE_ERROR_NOT_FOUND))
-        return G_SOURCE_REMOVE;
-
-      g_warning ("Failed to load " LOCATION_CONF_FILE ", unable to record location label: %s",
-                 err->message);
-      return G_SOURCE_REMOVE;
-    }
-
   g_auto (GStrv) keys = g_key_file_get_keys (kf, LOCATION_LABEL_GROUP, NULL, NULL);
   if (keys == NULL || *keys == NULL)
-    return G_SOURCE_REMOVE;
+    return NULL;
 
   g_autoptr (GString) label = g_string_new ("");
   g_auto (GVariantBuilder) builder = G_VARIANT_BUILDER_INIT (G_VARIANT_TYPE_ARRAY);
@@ -73,10 +59,33 @@ record_location_label (gpointer unused)
     }
 
   g_message ("Recording location label: %s", label->str);
+  return g_variant_builder_end (&builder);
+}
 
-  emtr_event_recorder_record_event (emtr_event_recorder_get_default (),
-                                    LOCATION_LABEL_EVENT,
-                                    g_variant_builder_end (&builder));
+gboolean
+record_location_label (gpointer unused)
+{
+  g_autoptr (GError) err = NULL;
+  g_autoptr (GKeyFile) kf = g_key_file_new ();
+
+  if (!g_key_file_load_from_file (kf, LOCATION_CONF_FILE, G_KEY_FILE_NONE, &err))
+    {
+      /* this file’s existence is optional, so not found is not an error */
+      if (g_error_matches (err, G_KEY_FILE_ERROR, G_KEY_FILE_ERROR_NOT_FOUND))
+        return G_SOURCE_REMOVE;
+
+      g_warning ("Failed to load " LOCATION_CONF_FILE ", unable to record location label: %s",
+                 err->message);
+      return G_SOURCE_REMOVE;
+    }
+
+  GVariant *payload = build_location_label_event (kf);
+  if (payload != NULL)
+    {
+      emtr_event_recorder_record_event (emtr_event_recorder_get_default (),
+                                        LOCATION_LABEL_EVENT,
+                                        payload);
+    }
 
   return G_SOURCE_REMOVE;
 }

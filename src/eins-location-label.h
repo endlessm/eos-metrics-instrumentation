@@ -22,6 +22,7 @@
 
 #include <gio/gio.h>
 
+GVariant *build_location_label_event (GKeyFile *kf);
 gboolean record_location_label (gpointer unused);
 GFileMonitor *location_file_monitor_new (void);
 
