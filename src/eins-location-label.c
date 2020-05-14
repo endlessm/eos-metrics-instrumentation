@@ -42,16 +42,21 @@ build_location_label_event (GKeyFile *kf)
     return NULL;
 
   g_auto (GVariantBuilder) builder = G_VARIANT_BUILDER_INIT (G_VARIANT_TYPE_ARRAY);
+  gboolean seen_nonempty_value = FALSE;
   for (GStrv cur = keys; *cur != NULL; cur++)
     {
       const gchar *key = *cur;
       g_autofree gchar *val = g_key_file_get_string (kf, LOCATION_LABEL_GROUP, key, NULL);
 
-      if (val == NULL)
+      if (val == NULL || *val == '\0')
         continue;
 
+      seen_nonempty_value = TRUE;
       g_variant_builder_add (&builder, "{ss}", key, val);
     }
+
+  if (!seen_nonempty_value)
+    return NULL;
 
   return g_variant_builder_end (&builder);
 }
