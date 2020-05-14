@@ -18,6 +18,7 @@
 
 noinst_PROGRAMS += \
 	tests/test-hwinfo \
+	tests/test-location-label \
 	tests/test-location \
 	tests/test-persistent-tally \
 	$(NULL)
@@ -26,6 +27,7 @@ TESTS = \
 	tests/test-hwinfo \
 	tests/test-persistent-tally \
 	tests/test-location.py \
+	tests/test-location-label \
 	run_coverage.coverage \
 	$(NULL)
 TEST_EXTENSIONS = .py .coverage
@@ -68,5 +70,17 @@ tests_test_location_CPPFLAGS = $(TEST_FLAGS)
 tests_test_location_LDADD = $(TEST_LIBS)
 
 EXTRA_DIST += tests/test-location.py
+
+tests_test_location_label_SOURCES = \
+	src/eins-location-label.h \
+	src/eins-location-label.c \
+	tests/test-location-label.c \
+	$(NULL)
+
+tests_test_location_label_CPPFLAGS = $(TEST_FLAGS) \
+	-DSYSCONFDIR="\"$(sysconfdir)\"" \
+	$(NULL)
+
+tests_test_location_label_LDADD = $(TEST_LIBS)
 
 clean-local:: clean-coverage
