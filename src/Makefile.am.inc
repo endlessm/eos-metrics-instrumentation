@@ -33,6 +33,8 @@ src_eos_metrics_instrumentation_SOURCES = \
 	src/eins-hwinfo.c \
 	src/eins-location.h \
 	src/eins-location.c \
+	src/eins-location-label.h \
+	src/eins-location-label.c \
 	src/eins-network-id.h \
 	src/eins-network-id.c \
 	src/eins-persistent-tally.h \
