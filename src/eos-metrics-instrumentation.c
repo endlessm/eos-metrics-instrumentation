@@ -39,23 +39,7 @@
  */
 #define STARTUP_FINISHED "bf7e8aed-2932-455c-a28e-d407cfd5aaba"
 
-/*
- * Recorded half an hour after the system starts up and then hourly after that.
- * The auxiliary payload is a 2-tuple of the form (uptime_tally, boot_count).
- * uptime_tally is a running total of the system uptime in nanoseconds as a
- * 64-bit signed integer. This running total accumulates across boots and
- * excludes time the computer spends suspended. boot_count is a 64-bit signed
- * integer indicating the 1-based count of the current boot.
- */
-#define UPTIME_EVENT "9af2cc74-d6dd-423f-ac44-600a6eee2d96"
-
-#define UPTIME_KEY "uptime"
 #define BOOT_COUNT_KEY "boot_count"
-
-/* This is the period (one hour) with which we record the total system uptime
- * across all boots.
- */
-#define RECORD_UPTIME_INTERVAL_SECONDS (60u * 60u)
 
 /*
  * Started when a user logs in and stopped when that user logs out.
@@ -119,8 +103,6 @@
 #define EOS_IMAGE_VERSION_PATH "/sysroot"
 #define EOS_IMAGE_VERSION_ALT_PATH "/"
 
-static gboolean prev_time_set = FALSE;
-static gint64 prev_time;
 static EinsPersistentTally *persistent_tally;
 
 static GData *humanity_by_session_id;
@@ -305,69 +287,6 @@ increment_boot_count (gpointer unused)
     }
 
   eins_persistent_tally_add_to_tally (persistent_tally, BOOT_COUNT_KEY, 1);
-  return G_SOURCE_REMOVE;
-}
-
-/* Returns an auxiliary payload that is a 2-tuple of the form
- * (uptime_tally, boot_count). uptime_tally is the running total uptime across
- * all boots in nanoseconds as a 64-bit signed integer. boot_count is the
- * 1-based count associated with the current boot as a 64-bit signed integer.
- * Returns NULL on error. Sets the global variable prev_time to the current
- * time. Adds the time elapsed since prev_time to the running uptime tally that
- * spans boots.
- */
-static GVariant *
-make_uptime_payload (void)
-{
-  gint64 current_time;
-  gboolean got_current_time =
-    emtr_util_get_current_time (CLOCK_MONOTONIC, &current_time);
-
-  if (!got_current_time || !prev_time_set || persistent_tally == NULL)
-    return NULL;
-
-  gint64 time_elapsed = current_time - prev_time;
-  gboolean add_succeeded =
-    eins_persistent_tally_add_to_tally (persistent_tally, UPTIME_KEY,
-                                        time_elapsed);
-
-  if (!add_succeeded)
-    return NULL;
-
-  prev_time = current_time;
-
-  gint64 total_uptime;
-  gboolean got_uptime =
-    eins_persistent_tally_get_tally (persistent_tally, UPTIME_KEY,
-                                     &total_uptime);
-
-  if (!got_uptime)
-    return NULL;
-
-  gint64 boot_count;
-  gboolean got_boot_count =
-    eins_persistent_tally_get_tally (persistent_tally, BOOT_COUNT_KEY,
-                                     &boot_count);
-
-  if (!got_boot_count)
-    return NULL;
-
-  return g_variant_new ("(xx)", total_uptime, boot_count);
-}
-
-/* Intended for use as a GSourceFunc callback. Records an uptime event. Reports
- * the running uptime tally that spans across boots and the boot count as the
- * auxiliary payload of the uptime event.
- */
-static gboolean
-record_uptime (gpointer unused)
-{
-  GVariant *uptime_payload = make_uptime_payload ();
-  emtr_event_recorder_record_event (emtr_event_recorder_get_default (),
-                                    UPTIME_EVENT, uptime_payload);
-  g_timeout_add_seconds (RECORD_UPTIME_INTERVAL_SECONDS,
-                         (GSourceFunc) record_uptime,
-                         NULL);
   return G_SOURCE_REMOVE;
 }
 
@@ -772,7 +691,6 @@ gint
 main (gint                argc,
       const gchar * const argv[])
 {
-  prev_time_set = emtr_util_get_current_time (CLOCK_MONOTONIC, &prev_time);
   g_datalist_init (&humanity_by_session_id);
 
   g_autofree char *image_version = get_image_version ();
@@ -790,8 +708,6 @@ main (gint                argc,
   g_idle_add ((GSourceFunc) record_image_version, image_version);
   g_idle_add ((GSourceFunc) record_location_label, NULL);
   g_idle_add ((GSourceFunc) record_network_id_force, image_version);
-  g_timeout_add_seconds (RECORD_UPTIME_INTERVAL_SECONDS / 2,
-                         (GSourceFunc) record_uptime, NULL);
 
   eins_hwinfo_start ();
 
