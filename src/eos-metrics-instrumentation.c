@@ -28,7 +28,6 @@
 
 #include "eins-hwinfo.h"
 #include "eins-location-label.h"
-#include "eins-network-id.h"
 #include "eins-persistent-tally.h"
 
 /*
@@ -49,16 +48,6 @@
 #define USER_IS_LOGGED_IN "add052be-7b2a-4959-81a5-a7f45062ee98"
 
 #define MIN_HUMAN_USER_ID 1000
-
-/*
- * Recorded when we detect a change in the default route after the network
- * connectivity has changed. The auxiliary payload is a 32-bit unsigned integer
- * containing a hash of the ethernet MAC address of the gateway, favouring
- * IPv4 if available, or IPv6 if not. The intention is to provide a value
- * which is opaque and stable which is the same for every system located
- * on the same physical network.
- */
-#define NETWORK_ID_EVENT "38eb48f8-e131-9b57-77c6-35e0590c82fd"
 
 /* Recorded at every startup to track deployment statistics. The auxiliary
  * payload is a 3-tuple of the form (os_name, os_version, eos_personality).
@@ -106,8 +95,6 @@
 static EinsPersistentTally *persistent_tally;
 
 static GData *humanity_by_session_id;
-
-static guint32 previous_network_id = 0;
 
 static gboolean
 record_os_version (gpointer unused)
@@ -584,102 +571,6 @@ login_dbus_proxy_new (void)
   return dbus_proxy;
 }
 
-static void
-record_network_id_impl (const char *image_version,
-                        gboolean force)
-{
-  guint32 network_id;
-
-  /* Network ID is only needed for analysis on certain partner images */
-  if (!image_version ||
-      !(g_str_has_prefix (image_version, "fnde-") ||
-        g_str_has_prefix (image_version, "impact-") ||
-        g_str_has_prefix (image_version, "solutions-")))
-    {
-      g_message ("Not recording network ID as it is not required for this image");
-      return;
-    }
-
-  if (!eins_network_id_get (&network_id))
-    return;
-
-  if (network_id != previous_network_id || force)
-    {
-      g_message ("Recording network ID: %8x", network_id);
-
-      emtr_event_recorder_record_event (emtr_event_recorder_get_default (),
-                                        NETWORK_ID_EVENT,
-                                        g_variant_new_uint32 (network_id));
-
-      previous_network_id = network_id;
-    }
-}
-
-static gboolean
-record_network_id_force (const char *image_version)
-{
-  record_network_id_impl (image_version, TRUE);
-  return G_SOURCE_REMOVE;
-}
-
-static gboolean
-record_network_id (const char *image_version)
-{
-  record_network_id_impl (image_version, FALSE);
-  return G_SOURCE_REMOVE;
-}
-
-/* from https://developer.gnome.org/NetworkManager/unstable/nm-dbus-types.html#NMState */
-#define NM_STATE_CONNECTED_SITE 60
-
-static void
-record_network_change (GDBusProxy *dbus_proxy,
-                       gchar      *sender_name,
-                       gchar      *signal_name,
-                       GVariant   *parameters,
-                       const char *image_version)
-{
-  if (strcmp ("StateChanged", signal_name) == 0)
-    {
-      guint32 new_network_state;
-      g_variant_get (parameters, "(u)", &new_network_state);
-
-      /* schedule recording the network ID provided we have a default route */
-      if (new_network_state >= NM_STATE_CONNECTED_SITE)
-        {
-          g_idle_add ((GSourceFunc) record_network_id,
-                      (gpointer) image_version);
-        }
-    }
-}
-
-static GDBusProxy *
-network_dbus_proxy_new (const char *image_version)
-{
-  GError *error = NULL;
-  GDBusProxy *dbus_proxy =
-    g_dbus_proxy_new_for_bus_sync (G_BUS_TYPE_SYSTEM,
-                                   G_DBUS_PROXY_FLAGS_NONE,
-                                   NULL /* GDBusInterfaceInfo */,
-                                   "org.freedesktop.NetworkManager",
-                                   "/org/freedesktop/NetworkManager",
-                                   "org.freedesktop.NetworkManager",
-                                   NULL /* GCancellable */,
-                                   &error);
-  if (dbus_proxy == NULL)
-    {
-      g_warning ("Error creating GDBusProxy: %s.", error->message);
-      g_error_free (error);
-    }
-  else
-    {
-      g_signal_connect (dbus_proxy, "g-signal",
-                        G_CALLBACK (record_network_change),
-                        (gpointer) image_version);
-    }
-  return dbus_proxy;
-}
-
 static gboolean
 quit_main_loop (GMainLoop *main_loop)
 {
@@ -697,7 +588,6 @@ main (gint                argc,
 
   GDBusProxy *systemd_dbus_proxy = systemd_dbus_proxy_new ();
   GDBusProxy *login_dbus_proxy = login_dbus_proxy_new ();
-  GDBusProxy *network_dbus_proxy = network_dbus_proxy_new (image_version);
   GFileMonitor *location_file_monitor = location_file_monitor_new ();
 
   GMainLoop *main_loop = g_main_loop_new (NULL, TRUE);
@@ -707,7 +597,6 @@ main (gint                argc,
   g_idle_add ((GSourceFunc) record_live_boot, NULL);
   g_idle_add ((GSourceFunc) record_image_version, image_version);
   g_idle_add ((GSourceFunc) record_location_label, NULL);
-  g_idle_add ((GSourceFunc) record_network_id_force, image_version);
 
   eins_hwinfo_start ();
 
@@ -724,7 +613,6 @@ main (gint                argc,
   g_main_loop_unref (main_loop);
   g_clear_object (&systemd_dbus_proxy);
   g_clear_object (&login_dbus_proxy);
-  g_clear_object (&network_dbus_proxy);
   g_clear_object (&location_file_monitor);
 
   return EXIT_SUCCESS;
