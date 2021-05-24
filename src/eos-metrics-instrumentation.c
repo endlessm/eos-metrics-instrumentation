@@ -27,7 +27,6 @@
 #include <eosmetrics/eosmetrics.h>
 
 #include "eins-hwinfo.h"
-#include "eins-location.h"
 #include "eins-location-label.h"
 #include "eins-network-id.h"
 #include "eins-persistent-tally.h"
@@ -785,7 +784,6 @@ main (gint                argc,
 
   GMainLoop *main_loop = g_main_loop_new (NULL, TRUE);
 
-  g_idle_add ((GSourceFunc) record_location_metric, image_version);
   g_idle_add ((GSourceFunc) record_os_version, NULL);
   g_idle_add ((GSourceFunc) increment_boot_count, NULL);
   g_idle_add ((GSourceFunc) record_live_boot, NULL);

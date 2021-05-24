@@ -19,14 +19,12 @@
 noinst_PROGRAMS += \
 	tests/test-hwinfo \
 	tests/test-location-label \
-	tests/test-location \
 	tests/test-persistent-tally \
 	$(NULL)
 
 TESTS = \
 	tests/test-hwinfo \
 	tests/test-persistent-tally \
-	tests/test-location.py \
 	tests/test-location-label \
 	run_coverage.coverage \
 	$(NULL)
@@ -64,12 +62,9 @@ tests_test_hwinfo_LDADD = $(TEST_LIBS)
 tests_test_location_SOURCES = \
 	src/eins-location.c src/eins-location.h \
 	src/geoclue.c \
-	tests/test-location.c \
 	$(NULL)
 tests_test_location_CPPFLAGS = $(TEST_FLAGS)
 tests_test_location_LDADD = $(TEST_LIBS)
-
-EXTRA_DIST += tests/test-location.py
 
 tests_test_location_label_SOURCES = \
 	src/eins-location-label.h \

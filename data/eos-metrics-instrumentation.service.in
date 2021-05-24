@@ -1,7 +1,6 @@
 [Unit]
 Description=EndlessOS Metrics Instrumentation
 Requires=eos-metrics-event-recorder.service
-Wants=geoclue.service
 After=eos-metrics-event-recorder.service
 
 [Service]
