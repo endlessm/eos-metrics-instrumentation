@@ -120,32 +120,6 @@
 #define EOS_IMAGE_VERSION_PATH "/sysroot"
 #define EOS_IMAGE_VERSION_ALT_PATH "/"
 
-/*
- * Reported once at startup to describe whether certain ACPI tables are present
- * on the system. The payload has type u, formed as a bitmask of which ACPI
- * tables are found. The tables we check for are MSDM and SLIC, which hold
- * OEM Windows license information on newer and older systems respectively.
- * The bits are mapped as:
- *
- *  0: no table found, system shipped without Windows
- *  1: MSDM table found, system shipped with newer Windows
- *  2: SLIC table found, system shipped with Vista-era Windows
- *
- * We have not seen systems which have both tables, but they might exist in the
- * wild and would appear with a value of 3. With this information, assuming
- * LIVE_BOOT_EVENT is not sent, then we can distinguish:
- *
- *  SLIC|MSDM | DUAL_BOOT | Meaning
- * -----------+-----------+----------------------------------------------------
- *    >0      |   false   | Endless OS is the sole OS, PC came with Windows
- *    >0      |   true    | Endless OS installed alongside OEM Windows
- *     0      |   false   | Endless OS is the sole OS, PC came without Windows
- *     0      |   true    | Dual-booting with a retail Windows
- */
-#define WINDOWS_LICENSE_TABLES_EVENT "ef74310f-7c7e-ca05-0e56-3e495973070a"
-#define ACPI_TABLES_PATH "/sys/firmware/acpi/tables"
-static const gchar * const windows_license_tables[] = { "MSDM", "SLIC" };
-
 static gboolean prev_time_set = FALSE;
 static gint64 prev_time;
 static EinsPersistentTally *persistent_tally;
@@ -789,34 +763,6 @@ network_dbus_proxy_new (const char *image_version)
 }
 
 static gboolean
-record_windows_licenses (gpointer unused)
-{
-  g_autoptr(GFile) tables = g_file_new_for_path (ACPI_TABLES_PATH);
-  guint32 licenses = 0;
-  gsize i;
-
-  for (i = 0; i < G_N_ELEMENTS (windows_license_tables); i++)
-    {
-      const gchar *table_name = windows_license_tables[i];
-      g_autoptr(GFile) table = g_file_get_child (tables, table_name);
-      gboolean present = g_file_query_exists (table, NULL);
-
-      g_debug ("ACPI table %s is %s",
-               table_name,
-               present ? "present" : "absent");
-
-      if (present)
-        licenses |= 1 << i;
-    }
-
-  emtr_event_recorder_record_event (emtr_event_recorder_get_default (),
-                                    WINDOWS_LICENSE_TABLES_EVENT,
-                                    g_variant_new_uint32 (licenses));
-
-  return G_SOURCE_REMOVE;
-}
-
-static gboolean
 quit_main_loop (GMainLoop *main_loop)
 {
   g_main_loop_quit (main_loop);
@@ -846,7 +792,6 @@ main (gint                argc,
   g_idle_add ((GSourceFunc) record_image_version, image_version);
   g_idle_add ((GSourceFunc) record_location_label, NULL);
   g_idle_add ((GSourceFunc) record_network_id_force, image_version);
-  g_idle_add ((GSourceFunc) record_windows_licenses, NULL);
   g_timeout_add_seconds (RECORD_UPTIME_INTERVAL_SECONDS / 2,
                          (GSourceFunc) record_uptime, NULL);
 
