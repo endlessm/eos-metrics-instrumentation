@@ -5,7 +5,6 @@ Maintainer: Kurt von Laven <kurt@endlessm.com>
 Build-Depends: debhelper (>= 9),
 	autotools-dev,
 	eos-metrics-0-dev (>= 0.3.0),
-	geoclue-2.0,
 	libflatpak-dev,
 	libglib2.0-dev,
 	libgtop2-dev,
@@ -20,7 +19,6 @@ Package: eos-metrics-instrumentation
 Section: misc
 Architecture: any
 Depends: ${shlibs:Depends}, ${misc:Depends},
-	geoclue-2.0,
 	systemd (>= 200),
 	util-linux (>= 2.32),
 Description: Metrics instrumentation for EndlessOS
