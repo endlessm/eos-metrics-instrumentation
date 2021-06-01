@@ -21,26 +21,16 @@ libexec_PROGRAMS = \
 	src/eos-crash-metrics \
 	$(NULL)
 
-src/geoclue.c: src/geoclue.h
-src/geoclue.h: $(GEOCLUE_DBUS_INTERFACE_XML)
-	$(AM_V_GEN)$(GDBUS_CODEGEN) --interface-prefix org.freedesktop.GeoClue2 \
-		--generate-c-code src/geoclue --c-namespace Geoclue $<
-BUILT_SOURCES += src/geoclue.c src/geoclue.h
-
 src_eos_metrics_instrumentation_SOURCES = \
 	src/eos-metrics-instrumentation.c \
 	src/eins-hwinfo.h \
 	src/eins-hwinfo.c \
-	src/eins-location.h \
-	src/eins-location.c \
 	src/eins-location-label.h \
 	src/eins-location-label.c \
 	src/eins-network-id.h \
 	src/eins-network-id.c \
 	src/eins-persistent-tally.h \
 	src/eins-persistent-tally.c \
-	src/geoclue.h \
-	src/geoclue.c \
 	$(NULL)
 
 # Pre-processor flags

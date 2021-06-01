@@ -46,12 +46,6 @@
  */
 #define SYSROOT_DISK_SPACE_EVENT "5f58024f-3b99-47d3-a17f-1ec876acd97e"
 
-/* As above, but for the /var/endless-extra partition on split-disk systems. If
- * nothing is mounted there, or if disk space cannot be determined for some
- * reason, this event will not be reported.
- */
-#define EXTRA_DISK_SPACE_EVENT "da505554-4248-4a38-bb32-84ab58e45a6d"
-
 /* One day */
 #define RECORD_DISK_SPACE_INTERVAL_SECONDS (60u * 60u * 24u)
 
@@ -179,12 +173,8 @@ static gboolean
 record_disk_space (gpointer unused)
 {
   g_autoptr(GFile) root = g_file_new_for_path ("/");
-  g_autoptr(GFile) extra = g_file_new_for_path ("/var/endless-extra");
 
   record_disk_space_for (root, SYSROOT_DISK_SPACE_EVENT);
-
-  if (is_mounted (extra))
-    record_disk_space_for (extra, EXTRA_DISK_SPACE_EVENT);
 
   return G_SOURCE_CONTINUE;
 }

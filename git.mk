@@ -354,7 +354,6 @@ $(srcdir)/.gitignore: Makefile.am $(top_srcdir)/git.mk
 			TAGS ID GTAGS GRTAGS GSYMS GPATH tags \
 			"*.tab.c" \
 			$(MAINTAINERCLEANFILES) \
-			$(BUILT_SOURCES) \
 			$(patsubst %.vala,%.c,$(filter %.vala,$(SOURCES))) \
 			$(filter %_vala.stamp,$(DIST_COMMON)) \
 			$(filter %.vapi,$(DIST_COMMON)) \

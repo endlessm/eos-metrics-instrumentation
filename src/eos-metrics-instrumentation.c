@@ -27,9 +27,7 @@
 #include <eosmetrics/eosmetrics.h>
 
 #include "eins-hwinfo.h"
-#include "eins-location.h"
 #include "eins-location-label.h"
-#include "eins-network-id.h"
 #include "eins-persistent-tally.h"
 
 /*
@@ -40,23 +38,7 @@
  */
 #define STARTUP_FINISHED "bf7e8aed-2932-455c-a28e-d407cfd5aaba"
 
-/*
- * Recorded half an hour after the system starts up and then hourly after that.
- * The auxiliary payload is a 2-tuple of the form (uptime_tally, boot_count).
- * uptime_tally is a running total of the system uptime in nanoseconds as a
- * 64-bit signed integer. This running total accumulates across boots and
- * excludes time the computer spends suspended. boot_count is a 64-bit signed
- * integer indicating the 1-based count of the current boot.
- */
-#define UPTIME_EVENT "9af2cc74-d6dd-423f-ac44-600a6eee2d96"
-
-#define UPTIME_KEY "uptime"
 #define BOOT_COUNT_KEY "boot_count"
-
-/* This is the period (one hour) with which we record the total system uptime
- * across all boots.
- */
-#define RECORD_UPTIME_INTERVAL_SECONDS (60u * 60u)
 
 /*
  * Started when a user logs in and stopped when that user logs out.
@@ -66,16 +48,6 @@
 #define USER_IS_LOGGED_IN "add052be-7b2a-4959-81a5-a7f45062ee98"
 
 #define MIN_HUMAN_USER_ID 1000
-
-/*
- * Recorded when we detect a change in the default route after the network
- * connectivity has changed. The auxiliary payload is a 32-bit unsigned integer
- * containing a hash of the ethernet MAC address of the gateway, favouring
- * IPv4 if available, or IPv6 if not. The intention is to provide a value
- * which is opaque and stable which is the same for every system located
- * on the same physical network.
- */
-#define NETWORK_ID_EVENT "38eb48f8-e131-9b57-77c6-35e0590c82fd"
 
 /* Recorded at every startup to track deployment statistics. The auxiliary
  * payload is a 3-tuple of the form (os_name, os_version, eos_personality).
@@ -120,39 +92,9 @@
 #define EOS_IMAGE_VERSION_PATH "/sysroot"
 #define EOS_IMAGE_VERSION_ALT_PATH "/"
 
-/*
- * Reported once at startup to describe whether certain ACPI tables are present
- * on the system. The payload has type u, formed as a bitmask of which ACPI
- * tables are found. The tables we check for are MSDM and SLIC, which hold
- * OEM Windows license information on newer and older systems respectively.
- * The bits are mapped as:
- *
- *  0: no table found, system shipped without Windows
- *  1: MSDM table found, system shipped with newer Windows
- *  2: SLIC table found, system shipped with Vista-era Windows
- *
- * We have not seen systems which have both tables, but they might exist in the
- * wild and would appear with a value of 3. With this information, assuming
- * LIVE_BOOT_EVENT is not sent, then we can distinguish:
- *
- *  SLIC|MSDM | DUAL_BOOT | Meaning
- * -----------+-----------+----------------------------------------------------
- *    >0      |   false   | Endless OS is the sole OS, PC came with Windows
- *    >0      |   true    | Endless OS installed alongside OEM Windows
- *     0      |   false   | Endless OS is the sole OS, PC came without Windows
- *     0      |   true    | Dual-booting with a retail Windows
- */
-#define WINDOWS_LICENSE_TABLES_EVENT "ef74310f-7c7e-ca05-0e56-3e495973070a"
-#define ACPI_TABLES_PATH "/sys/firmware/acpi/tables"
-static const gchar * const windows_license_tables[] = { "MSDM", "SLIC" };
-
-static gboolean prev_time_set = FALSE;
-static gint64 prev_time;
 static EinsPersistentTally *persistent_tally;
 
 static GData *humanity_by_session_id;
-
-static guint32 previous_network_id = 0;
 
 static gboolean
 record_os_version (gpointer unused)
@@ -332,69 +274,6 @@ increment_boot_count (gpointer unused)
     }
 
   eins_persistent_tally_add_to_tally (persistent_tally, BOOT_COUNT_KEY, 1);
-  return G_SOURCE_REMOVE;
-}
-
-/* Returns an auxiliary payload that is a 2-tuple of the form
- * (uptime_tally, boot_count). uptime_tally is the running total uptime across
- * all boots in nanoseconds as a 64-bit signed integer. boot_count is the
- * 1-based count associated with the current boot as a 64-bit signed integer.
- * Returns NULL on error. Sets the global variable prev_time to the current
- * time. Adds the time elapsed since prev_time to the running uptime tally that
- * spans boots.
- */
-static GVariant *
-make_uptime_payload (void)
-{
-  gint64 current_time;
-  gboolean got_current_time =
-    emtr_util_get_current_time (CLOCK_MONOTONIC, &current_time);
-
-  if (!got_current_time || !prev_time_set || persistent_tally == NULL)
-    return NULL;
-
-  gint64 time_elapsed = current_time - prev_time;
-  gboolean add_succeeded =
-    eins_persistent_tally_add_to_tally (persistent_tally, UPTIME_KEY,
-                                        time_elapsed);
-
-  if (!add_succeeded)
-    return NULL;
-
-  prev_time = current_time;
-
-  gint64 total_uptime;
-  gboolean got_uptime =
-    eins_persistent_tally_get_tally (persistent_tally, UPTIME_KEY,
-                                     &total_uptime);
-
-  if (!got_uptime)
-    return NULL;
-
-  gint64 boot_count;
-  gboolean got_boot_count =
-    eins_persistent_tally_get_tally (persistent_tally, BOOT_COUNT_KEY,
-                                     &boot_count);
-
-  if (!got_boot_count)
-    return NULL;
-
-  return g_variant_new ("(xx)", total_uptime, boot_count);
-}
-
-/* Intended for use as a GSourceFunc callback. Records an uptime event. Reports
- * the running uptime tally that spans across boots and the boot count as the
- * auxiliary payload of the uptime event.
- */
-static gboolean
-record_uptime (gpointer unused)
-{
-  GVariant *uptime_payload = make_uptime_payload ();
-  emtr_event_recorder_record_event (emtr_event_recorder_get_default (),
-                                    UPTIME_EVENT, uptime_payload);
-  g_timeout_add_seconds (RECORD_UPTIME_INTERVAL_SECONDS,
-                         (GSourceFunc) record_uptime,
-                         NULL);
   return G_SOURCE_REMOVE;
 }
 
@@ -692,130 +571,6 @@ login_dbus_proxy_new (void)
   return dbus_proxy;
 }
 
-static void
-record_network_id_impl (const char *image_version,
-                        gboolean force)
-{
-  guint32 network_id;
-
-  /* Network ID is only needed for analysis on certain partner images */
-  if (!image_version ||
-      !(g_str_has_prefix (image_version, "fnde-") ||
-        g_str_has_prefix (image_version, "impact-") ||
-        g_str_has_prefix (image_version, "solutions-")))
-    {
-      g_message ("Not recording network ID as it is not required for this image");
-      return;
-    }
-
-  if (!eins_network_id_get (&network_id))
-    return;
-
-  if (network_id != previous_network_id || force)
-    {
-      g_message ("Recording network ID: %8x", network_id);
-
-      emtr_event_recorder_record_event (emtr_event_recorder_get_default (),
-                                        NETWORK_ID_EVENT,
-                                        g_variant_new_uint32 (network_id));
-
-      previous_network_id = network_id;
-    }
-}
-
-static gboolean
-record_network_id_force (const char *image_version)
-{
-  record_network_id_impl (image_version, TRUE);
-  return G_SOURCE_REMOVE;
-}
-
-static gboolean
-record_network_id (const char *image_version)
-{
-  record_network_id_impl (image_version, FALSE);
-  return G_SOURCE_REMOVE;
-}
-
-/* from https://developer.gnome.org/NetworkManager/unstable/nm-dbus-types.html#NMState */
-#define NM_STATE_CONNECTED_SITE 60
-
-static void
-record_network_change (GDBusProxy *dbus_proxy,
-                       gchar      *sender_name,
-                       gchar      *signal_name,
-                       GVariant   *parameters,
-                       const char *image_version)
-{
-  if (strcmp ("StateChanged", signal_name) == 0)
-    {
-      guint32 new_network_state;
-      g_variant_get (parameters, "(u)", &new_network_state);
-
-      /* schedule recording the network ID provided we have a default route */
-      if (new_network_state >= NM_STATE_CONNECTED_SITE)
-        {
-          g_idle_add ((GSourceFunc) record_network_id,
-                      (gpointer) image_version);
-        }
-    }
-}
-
-static GDBusProxy *
-network_dbus_proxy_new (const char *image_version)
-{
-  GError *error = NULL;
-  GDBusProxy *dbus_proxy =
-    g_dbus_proxy_new_for_bus_sync (G_BUS_TYPE_SYSTEM,
-                                   G_DBUS_PROXY_FLAGS_NONE,
-                                   NULL /* GDBusInterfaceInfo */,
-                                   "org.freedesktop.NetworkManager",
-                                   "/org/freedesktop/NetworkManager",
-                                   "org.freedesktop.NetworkManager",
-                                   NULL /* GCancellable */,
-                                   &error);
-  if (dbus_proxy == NULL)
-    {
-      g_warning ("Error creating GDBusProxy: %s.", error->message);
-      g_error_free (error);
-    }
-  else
-    {
-      g_signal_connect (dbus_proxy, "g-signal",
-                        G_CALLBACK (record_network_change),
-                        (gpointer) image_version);
-    }
-  return dbus_proxy;
-}
-
-static gboolean
-record_windows_licenses (gpointer unused)
-{
-  g_autoptr(GFile) tables = g_file_new_for_path (ACPI_TABLES_PATH);
-  guint32 licenses = 0;
-  gsize i;
-
-  for (i = 0; i < G_N_ELEMENTS (windows_license_tables); i++)
-    {
-      const gchar *table_name = windows_license_tables[i];
-      g_autoptr(GFile) table = g_file_get_child (tables, table_name);
-      gboolean present = g_file_query_exists (table, NULL);
-
-      g_debug ("ACPI table %s is %s",
-               table_name,
-               present ? "present" : "absent");
-
-      if (present)
-        licenses |= 1 << i;
-    }
-
-  emtr_event_recorder_record_event (emtr_event_recorder_get_default (),
-                                    WINDOWS_LICENSE_TABLES_EVENT,
-                                    g_variant_new_uint32 (licenses));
-
-  return G_SOURCE_REMOVE;
-}
-
 static gboolean
 quit_main_loop (GMainLoop *main_loop)
 {
@@ -827,28 +582,21 @@ gint
 main (gint                argc,
       const gchar * const argv[])
 {
-  prev_time_set = emtr_util_get_current_time (CLOCK_MONOTONIC, &prev_time);
   g_datalist_init (&humanity_by_session_id);
 
   g_autofree char *image_version = get_image_version ();
 
   GDBusProxy *systemd_dbus_proxy = systemd_dbus_proxy_new ();
   GDBusProxy *login_dbus_proxy = login_dbus_proxy_new ();
-  GDBusProxy *network_dbus_proxy = network_dbus_proxy_new (image_version);
   GFileMonitor *location_file_monitor = location_file_monitor_new ();
 
   GMainLoop *main_loop = g_main_loop_new (NULL, TRUE);
 
-  g_idle_add ((GSourceFunc) record_location_metric, image_version);
   g_idle_add ((GSourceFunc) record_os_version, NULL);
   g_idle_add ((GSourceFunc) increment_boot_count, NULL);
   g_idle_add ((GSourceFunc) record_live_boot, NULL);
   g_idle_add ((GSourceFunc) record_image_version, image_version);
   g_idle_add ((GSourceFunc) record_location_label, NULL);
-  g_idle_add ((GSourceFunc) record_network_id_force, image_version);
-  g_idle_add ((GSourceFunc) record_windows_licenses, NULL);
-  g_timeout_add_seconds (RECORD_UPTIME_INTERVAL_SECONDS / 2,
-                         (GSourceFunc) record_uptime, NULL);
 
   eins_hwinfo_start ();
 
@@ -865,7 +613,6 @@ main (gint                argc,
   g_main_loop_unref (main_loop);
   g_clear_object (&systemd_dbus_proxy);
   g_clear_object (&login_dbus_proxy);
-  g_clear_object (&network_dbus_proxy);
   g_clear_object (&location_file_monitor);
 
   return EXIT_SUCCESS;
