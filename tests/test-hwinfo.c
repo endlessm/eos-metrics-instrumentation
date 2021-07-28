@@ -19,59 +19,68 @@
 
 #include "eins-hwinfo.h"
 
-static void
-test_get_disk_space_for_root (void)
+static void assert_root_disk_space (DiskSpaceType *dspace)
 {
-  g_autoptr(GFile) root = g_file_new_for_path ("/");
-  g_autoptr(GVariant) payload = NULL;
-  g_autoptr(GError) error = NULL;
-  guint32 total, used, available;
-
-  payload = eins_hwinfo_get_disk_space_for_partition (root, &error);
-  g_assert_no_error (error);
-  g_assert_nonnull (payload);
-
-  g_assert_cmpstr (g_variant_get_type_string (payload), ==, "(uuu)");
-  g_variant_get (payload, "(uuu)", &total, &used, &available);
-
-  g_assert_cmpuint (total, >, 0);
-  g_assert_cmpuint (used, >, 0);
+  g_assert_cmpuint (dspace->total, >, 0);
+  g_assert_cmpuint (dspace->used, >, 0);
   /* maybe you have < 500 MB free, so no assertion about available itself */
 
   /* since we round to the nearest gigabyte, used + available <= total may not
    * hold -- what if used and available round up, but total rounds down? -- but
    * we should be within 1 GB.
    */
-  g_assert_cmpuint (used + available, <=, total + 1);
+  g_assert_cmpuint (dspace->used + dspace->free, <=, dspace->total + 1);
+}
+
+static void
+test_get_disk_space_for_root (void)
+{
+  g_autoptr(GFile) root = g_file_new_for_path ("/");
+  DiskSpaceType dspace = {};
+  g_autoptr(GError) error = NULL;
+  gboolean ret;
+
+  ret = eins_hwinfo_get_disk_space_for_partition (root, &dspace, &error);
+  g_assert_true (ret);
+  g_assert_no_error (error);
+
+  assert_root_disk_space (&dspace);
 }
 
 static void
 test_get_disk_space_for_nonexistent_dir (void)
 {
   g_autoptr(GFile) nonexistent = NULL;
-  g_autoptr(GVariant) payload = NULL;
+  DiskSpaceType dspace = {};
   g_autoptr(GError) error = NULL;
+  gboolean ret;
 
   nonexistent = g_file_new_for_path ("/ca29d735-ca59-4774-8677-5bf3e9f34a7e");
 
-  payload = eins_hwinfo_get_disk_space_for_partition (nonexistent, &error);
+  ret = eins_hwinfo_get_disk_space_for_partition (nonexistent, &dspace, &error);
+  g_assert_false (ret);
   g_assert_error (error, G_IO_ERROR, G_IO_ERROR_NOT_FOUND);
-  g_assert_null (payload);
+
+  g_assert_cmpuint (dspace.total, ==, 0);
+  g_assert_cmpuint (dspace.used, ==, 0);
+  g_assert_cmpuint (dspace.free, ==, 0);
+}
+
+static void
+assert_ram_size (guint32 size)
+{
+  /* If you have a system with less than 100 MB of RAM this test will fail.
+   * Good luck running Endless OS on that!
+   */
+  g_assert_cmpuint (size, >=, 100);
 }
 
 static void
 test_get_ram_size_for_current_system (void)
 {
-  g_autoptr(GVariant) payload = eins_hwinfo_get_ram_size ();
-  guint32 size;
+  guint32 size = eins_hwinfo_get_ram_size ();
 
-  g_assert_nonnull (payload);
-  g_assert_cmpstr (g_variant_get_type_string (payload), ==, "u");
-  g_variant_get (payload, "u", &size);
-  /* If you have a system with less than 100 MB of RAM this test will fail.
-   * Good luck running Endless OS on that!
-   */
-  g_assert_cmpuint (size, >=, 100);
+  assert_ram_size (size);
 }
 
 static const char *XPS_13_9343_JSON =
@@ -206,6 +215,23 @@ test_parse_lscpu_json (const CpuTestData *data)
     }
 }
 
+static void
+assert_cpu_info_for_current_system (GVariant *cpu_payload)
+{
+  const gchar *model;
+  guint16 n_cpus;
+  gdouble max_mhz;
+
+  g_assert_nonnull (cpu_payload);
+  g_assert_cmpstr (g_variant_get_type_string (cpu_payload), ==, "a(sqd)");
+  g_assert_cmpuint (g_variant_n_children (cpu_payload), >=, 1);
+
+  g_variant_get_child (cpu_payload, 0, "(&sqd)", &model, &n_cpus, &max_mhz);
+  g_assert_cmpstr (model, !=, "");
+  g_assert_cmpuint (n_cpus, >, 0);
+  g_assert_cmpfloat (max_mhz, >=, 0);
+}
+
 /* Just verify that we can launch lscpu, parse its output, and get something
  * other than the fallback values.
  */
@@ -213,18 +239,27 @@ static void
 test_get_cpu_info_for_current_system (void)
 {
   g_autoptr(GVariant) payload = eins_hwinfo_get_cpu_info ();
-  const gchar *model;
-  guint16 n_cpus;
-  gdouble max_mhz;
+
+  assert_cpu_info_for_current_system (payload);
+}
+
+static void
+test_get_computer_hwinfo (void)
+{
+  g_autoptr(GVariant) payload = eins_hwinfo_get_computer_hwinfo ();
+  guint32 ram_size;
+  DiskSpaceType dspace;
+  g_autoptr(GVariant) cpu_payload;
 
   g_assert_nonnull (payload);
-  g_assert_cmpstr (g_variant_get_type_string (payload), ==, "a(sqd)");
-  g_assert_cmpuint (g_variant_n_children (payload), >=, 1);
+  g_assert_cmpstr (g_variant_get_type_string (payload), ==, "(uuuua(sqd))");
 
-  g_variant_get_child (payload, 0, "(&sqd)", &model, &n_cpus, &max_mhz);
-  g_assert_cmpstr (model, !=, "");
-  g_assert_cmpuint (n_cpus, >, 0);
-  g_assert_cmpfloat (max_mhz, >=, 0);
+  g_variant_get (payload, "(uuuu@a(sqd))", &ram_size,
+                 &dspace.total, &dspace.used, &dspace.free, &cpu_payload);
+
+  assert_ram_size (ram_size);
+  assert_root_disk_space (&dspace);
+  assert_cpu_info_for_current_system (cpu_payload);
 }
 
 int
@@ -269,6 +304,8 @@ main (int   argc,
     }
 
   g_test_add_func ("/hwinfo/cpu/current", test_get_cpu_info_for_current_system);
+
+  g_test_add_func ("/hwinfo/computer/current", test_get_computer_hwinfo);
 
   return g_test_run ();
 }

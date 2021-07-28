@@ -24,10 +24,20 @@
 void eins_hwinfo_start (void);
 
 /* For tests */
-GVariant *eins_hwinfo_get_disk_space_for_partition (GFile   *file,
-                                                    GError **error);
-GVariant *eins_hwinfo_get_ram_size (void);
+typedef struct _DiskSpaceType {
+  guint32 total;
+  guint32 used;
+  guint32 free;
+} DiskSpaceType;
+
+gboolean eins_hwinfo_get_disk_space_for_partition (GFile          *file,
+                                                   DiskSpaceType  *diskspace,
+                                                   GError        **error);
+
+guint32 eins_hwinfo_get_ram_size (void);
 
 GVariant *eins_hwinfo_get_cpu_info (void);
 GVariant *eins_hwinfo_parse_lscpu_json (const gchar *json_data,
                                         gssize       json_size);
+
+GVariant *eins_hwinfo_get_computer_hwinfo (void);
