@@ -48,15 +48,6 @@
 
 #define MIN_HUMAN_USER_ID 1000
 
-/* Recorded at every startup to track deployment statistics. The auxiliary
- * payload is a 3-tuple of the form (os_name, os_version, eos_personality).
- * From 3.2.0 the personality is always reported as "" because the image
- * version event can be used.
- */
-#define OS_VERSION_EVENT "1fa16a31-9225-467e-8502-e31806e9b4eb"
-
-#define OS_RELEASE_FILE "/etc/os-release"
-
 /*
  * Recorded once at startup when booted from a combined live + installer USB
  * stick. We expect metrics reported from live sessions to be different to those
@@ -79,27 +70,6 @@
 static EinsPersistentTally *persistent_tally;
 
 static GData *humanity_by_session_id;
-
-static gboolean
-record_os_version (gpointer unused)
-{
-  g_autofree gchar *os_name = g_get_os_info (G_OS_INFO_KEY_NAME);
-  g_autofree gchar *os_version = g_get_os_info (G_OS_INFO_KEY_VERSION);
-
-  if (os_name == NULL || os_version == NULL)
-    {
-      g_warning ("%s: Could not find at least one of NAME or VERSION",
-                 G_STRFUNC);
-      return G_SOURCE_REMOVE;
-    }
-
-  GVariant *payload = g_variant_new ("(sss)",
-                                     os_name, os_version, "");
-  emtr_event_recorder_record_event (emtr_event_recorder_get_default (),
-                                    OS_VERSION_EVENT, payload);
-
-  return G_SOURCE_REMOVE;
-}
 
 static void
 check_cmdline (gboolean *is_live_boot,
@@ -514,7 +484,6 @@ main (gint                argc,
 
   GMainLoop *main_loop = g_main_loop_new (NULL, TRUE);
 
-  g_idle_add ((GSourceFunc) record_os_version, NULL);
   g_idle_add ((GSourceFunc) increment_boot_count, NULL);
   g_idle_add ((GSourceFunc) record_live_boot, NULL);
   g_idle_add ((GSourceFunc) record_location_label, NULL);
