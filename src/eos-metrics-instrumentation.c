@@ -26,7 +26,6 @@
 #include <eosmetrics/eosmetrics.h>
 
 #include "eins-hwinfo.h"
-#include "eins-location-label.h"
 #include "eins-persistent-tally.h"
 
 /*
@@ -420,12 +419,10 @@ main (gint                argc,
 
   GDBusProxy *systemd_dbus_proxy = systemd_dbus_proxy_new ();
   GDBusProxy *login_dbus_proxy = login_dbus_proxy_new ();
-  GFileMonitor *location_file_monitor = location_file_monitor_new ();
 
   GMainLoop *main_loop = g_main_loop_new (NULL, TRUE);
 
   g_idle_add ((GSourceFunc) increment_boot_count, NULL);
-  g_idle_add ((GSourceFunc) record_location_label, NULL);
 
   eins_hwinfo_start ();
 
@@ -442,7 +439,6 @@ main (gint                argc,
   g_main_loop_unref (main_loop);
   g_clear_object (&systemd_dbus_proxy);
   g_clear_object (&login_dbus_proxy);
-  g_clear_object (&location_file_monitor);
 
   return EXIT_SUCCESS;
 }

@@ -18,14 +18,12 @@
 
 noinst_PROGRAMS += \
 	tests/test-hwinfo \
-	tests/test-location-label \
 	tests/test-persistent-tally \
 	$(NULL)
 
 TESTS = \
 	tests/test-hwinfo \
 	tests/test-persistent-tally \
-	tests/test-location-label \
 	run_coverage.coverage \
 	$(NULL)
 TEST_EXTENSIONS = .py .coverage
@@ -58,24 +56,5 @@ tests_test_hwinfo_SOURCES = \
 tests_test_hwinfo_CPPFLAGS = $(TEST_FLAGS)
 
 tests_test_hwinfo_LDADD = $(TEST_LIBS)
-
-tests_test_location_SOURCES = \
-	src/eins-location.c src/eins-location.h \
-	src/geoclue.c \
-	$(NULL)
-tests_test_location_CPPFLAGS = $(TEST_FLAGS)
-tests_test_location_LDADD = $(TEST_LIBS)
-
-tests_test_location_label_SOURCES = \
-	src/eins-location-label.h \
-	src/eins-location-label.c \
-	tests/test-location-label.c \
-	$(NULL)
-
-tests_test_location_label_CPPFLAGS = $(TEST_FLAGS) \
-	-DSYSCONFDIR="\"$(sysconfdir)\"" \
-	$(NULL)
-
-tests_test_location_label_LDADD = $(TEST_LIBS)
 
 clean-local:: clean-coverage
