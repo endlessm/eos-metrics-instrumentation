@@ -22,7 +22,6 @@
 #include <glib-object.h>
 #include <glib-unix.h>
 #include <string.h>
-#include <sys/xattr.h>
 
 #include <eosmetrics/eosmetrics.h>
 
@@ -76,21 +75,6 @@
 #define KERNEL_CMDLINE_PATH "/proc/cmdline"
 #define LIVE_BOOT_FLAG_REGEX "\\bendless\\.live_boot\\b"
 #define DUAL_BOOT_FLAG_REGEX "\\bendless\\.image\\.device\\b"
-
-/*
- * Recorded once at startup to report the image ID. This is a string such as
- * "eos-eos3.1-amd64-amd64.170115-071322.base" which is saved in an attribute
- * on the root filesystem by the image builder, and allows us to tell the
- * channel that the OS was installed by (eg download, OEM pre-install, Endless
- * hardware, USB stick, etc) and which version was installed. The payload
- * is a single string containing this image ID, if present.
- */
-
-#define EOS_IMAGE_VERSION_EVENT "6b1c1cfc-bc36-438c-0647-dacd5878f2b3"
-
-#define EOS_IMAGE_VERSION_XATTR "user.eos-image-version"
-#define EOS_IMAGE_VERSION_PATH "/sysroot"
-#define EOS_IMAGE_VERSION_ALT_PATH "/"
 
 static EinsPersistentTally *persistent_tally;
 
@@ -154,66 +138,6 @@ record_live_boot (gpointer unused)
   else if (is_dual_boot)
     emtr_event_recorder_record_event (emtr_event_recorder_get_default (),
                                       DUAL_BOOT_EVENT, NULL);
-
-  return G_SOURCE_REMOVE;
-}
-
-static gchar *
-get_image_version_for_path (const gchar *path)
-{
-  ssize_t xattr_size;
-  g_autofree gchar *image_version = NULL;
-
-  xattr_size = getxattr (path, EOS_IMAGE_VERSION_XATTR, NULL, 0);
-
-  if (xattr_size < 0 || xattr_size > SSIZE_MAX - 1)
-    return NULL;
-
-  image_version = g_malloc0 (xattr_size + 1);
-
-  xattr_size = getxattr (path, EOS_IMAGE_VERSION_XATTR,
-                         image_version, xattr_size);
-
-  /* this check is primarily for ERANGE, in case the attribute size has
-   * changed from the first call to this one */
-  if (xattr_size < 0)
-    {
-      g_warning ("Error when getting 'eos-image-version' from %s: %s", path,
-                 strerror (errno));
-      return NULL;
-    }
-
-  /* shouldn't happen, but if the filesystem is modified or corrupted, we
-   * don't want to cause assertion errors / D-Bus disconnects with invalid
-   * UTF-8 strings */
-  if (!g_utf8_validate (image_version, xattr_size, NULL))
-    {
-      g_warning ("Invalid UTF-8 when getting 'eos-image-version' from %s",
-                 path);
-      return NULL;
-    }
-
-  return g_steal_pointer (&image_version);
-}
-
-static gchar *
-get_image_version (void)
-{
-  gchar *image_version = get_image_version_for_path (EOS_IMAGE_VERSION_PATH);
-
-  if (image_version == NULL)
-    image_version = get_image_version_for_path (EOS_IMAGE_VERSION_ALT_PATH);
-
-  return image_version;
-}
-
-static gboolean
-record_image_version (const char *image_version)
-{
-  if (image_version != NULL)
-    emtr_event_recorder_record_event (emtr_event_recorder_get_default (),
-                                      EOS_IMAGE_VERSION_EVENT,
-                                      g_variant_new_string (image_version));
 
   return G_SOURCE_REMOVE;
 }
@@ -584,8 +508,6 @@ main (gint                argc,
 {
   g_datalist_init (&humanity_by_session_id);
 
-  g_autofree char *image_version = get_image_version ();
-
   GDBusProxy *systemd_dbus_proxy = systemd_dbus_proxy_new ();
   GDBusProxy *login_dbus_proxy = login_dbus_proxy_new ();
   GFileMonitor *location_file_monitor = location_file_monitor_new ();
@@ -595,7 +517,6 @@ main (gint                argc,
   g_idle_add ((GSourceFunc) record_os_version, NULL);
   g_idle_add ((GSourceFunc) increment_boot_count, NULL);
   g_idle_add ((GSourceFunc) record_live_boot, NULL);
-  g_idle_add ((GSourceFunc) record_image_version, image_version);
   g_idle_add ((GSourceFunc) record_location_label, NULL);
 
   eins_hwinfo_start ();
