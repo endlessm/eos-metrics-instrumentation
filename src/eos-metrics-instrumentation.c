@@ -48,69 +48,9 @@
 
 #define MIN_HUMAN_USER_ID 1000
 
-/*
- * Recorded once at startup when booted from a combined live + installer USB
- * stick. We expect metrics reported from live sessions to be different to those
- * from installed versions of the OS, not least because live sessions are
- * transient, so each boot will appear to be a new installation, booted for the
- * first time. There is no payload.
- */
-#define LIVE_BOOT_EVENT "56be0b38-e47b-4578-9599-00ff9bda54bb"
-
-/*
- * Recorded once at startup on dual-boot installations. This is
- * mutually-exclusive with LIVE_BOOT_EVENT. There is no payload.
- */
-#define DUAL_BOOT_EVENT "16cfc671-5525-4a99-9eb9-4f6c074803a9"
-
-#define KERNEL_CMDLINE_PATH "/proc/cmdline"
-#define LIVE_BOOT_FLAG_REGEX "\\bendless\\.live_boot\\b"
-#define DUAL_BOOT_FLAG_REGEX "\\bendless\\.image\\.device\\b"
-
 static EinsPersistentTally *persistent_tally;
 
 static GData *humanity_by_session_id;
-
-static void
-check_cmdline (gboolean *is_live_boot,
-               gboolean *is_dual_boot)
-{
-  g_autofree gchar *cmdline = NULL;
-  g_autoptr(GError) error = NULL;
-
-  *is_live_boot = FALSE;
-  *is_dual_boot = FALSE;
-
-  if (!g_file_get_contents (KERNEL_CMDLINE_PATH, &cmdline, NULL, &error))
-    {
-      g_warning ("Error reading " KERNEL_CMDLINE_PATH ": %s", error->message);
-    }
-  else if (g_regex_match_simple (LIVE_BOOT_FLAG_REGEX, cmdline, 0, 0))
-    {
-      *is_live_boot = TRUE;
-    }
-  else if (g_regex_match_simple (DUAL_BOOT_FLAG_REGEX, cmdline, 0, 0))
-    {
-      *is_dual_boot = TRUE;
-    }
-}
-
-static gboolean
-record_live_boot (gpointer unused)
-{
-  gboolean is_live_boot, is_dual_boot;
-
-  check_cmdline (&is_live_boot, &is_dual_boot);
-
-  if (is_live_boot)
-    emtr_event_recorder_record_event (emtr_event_recorder_get_default (),
-                                      LIVE_BOOT_EVENT, NULL);
-  else if (is_dual_boot)
-    emtr_event_recorder_record_event (emtr_event_recorder_get_default (),
-                                      DUAL_BOOT_EVENT, NULL);
-
-  return G_SOURCE_REMOVE;
-}
 
 /*
  * Handle a signal from the systemd manager by recording the StartupFinished
@@ -485,7 +425,6 @@ main (gint                argc,
   GMainLoop *main_loop = g_main_loop_new (NULL, TRUE);
 
   g_idle_add ((GSourceFunc) increment_boot_count, NULL);
-  g_idle_add ((GSourceFunc) record_live_boot, NULL);
   g_idle_add ((GSourceFunc) record_location_label, NULL);
 
   eins_hwinfo_start ();
