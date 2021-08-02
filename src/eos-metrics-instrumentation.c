@@ -22,12 +22,10 @@
 #include <glib-object.h>
 #include <glib-unix.h>
 #include <string.h>
-#include <sys/xattr.h>
 
 #include <eosmetrics/eosmetrics.h>
 
 #include "eins-hwinfo.h"
-#include "eins-location-label.h"
 #include "eins-persistent-tally.h"
 
 /*
@@ -49,174 +47,9 @@
 
 #define MIN_HUMAN_USER_ID 1000
 
-/* Recorded at every startup to track deployment statistics. The auxiliary
- * payload is a 3-tuple of the form (os_name, os_version, eos_personality).
- * From 3.2.0 the personality is always reported as "" because the image
- * version event can be used.
- */
-#define OS_VERSION_EVENT "1fa16a31-9225-467e-8502-e31806e9b4eb"
-
-#define OS_RELEASE_FILE "/etc/os-release"
-
-/*
- * Recorded once at startup when booted from a combined live + installer USB
- * stick. We expect metrics reported from live sessions to be different to those
- * from installed versions of the OS, not least because live sessions are
- * transient, so each boot will appear to be a new installation, booted for the
- * first time. There is no payload.
- */
-#define LIVE_BOOT_EVENT "56be0b38-e47b-4578-9599-00ff9bda54bb"
-
-/*
- * Recorded once at startup on dual-boot installations. This is
- * mutually-exclusive with LIVE_BOOT_EVENT. There is no payload.
- */
-#define DUAL_BOOT_EVENT "16cfc671-5525-4a99-9eb9-4f6c074803a9"
-
-#define KERNEL_CMDLINE_PATH "/proc/cmdline"
-#define LIVE_BOOT_FLAG_REGEX "\\bendless\\.live_boot\\b"
-#define DUAL_BOOT_FLAG_REGEX "\\bendless\\.image\\.device\\b"
-
-/*
- * Recorded once at startup to report the image ID. This is a string such as
- * "eos-eos3.1-amd64-amd64.170115-071322.base" which is saved in an attribute
- * on the root filesystem by the image builder, and allows us to tell the
- * channel that the OS was installed by (eg download, OEM pre-install, Endless
- * hardware, USB stick, etc) and which version was installed. The payload
- * is a single string containing this image ID, if present.
- */
-
-#define EOS_IMAGE_VERSION_EVENT "6b1c1cfc-bc36-438c-0647-dacd5878f2b3"
-
-#define EOS_IMAGE_VERSION_XATTR "user.eos-image-version"
-#define EOS_IMAGE_VERSION_PATH "/sysroot"
-#define EOS_IMAGE_VERSION_ALT_PATH "/"
-
 static EinsPersistentTally *persistent_tally;
 
 static GData *humanity_by_session_id;
-
-static gboolean
-record_os_version (gpointer unused)
-{
-  g_autofree gchar *os_name = g_get_os_info (G_OS_INFO_KEY_NAME);
-  g_autofree gchar *os_version = g_get_os_info (G_OS_INFO_KEY_VERSION);
-
-  if (os_name == NULL || os_version == NULL)
-    {
-      g_warning ("%s: Could not find at least one of NAME or VERSION",
-                 G_STRFUNC);
-      return G_SOURCE_REMOVE;
-    }
-
-  GVariant *payload = g_variant_new ("(sss)",
-                                     os_name, os_version, "");
-  emtr_event_recorder_record_event (emtr_event_recorder_get_default (),
-                                    OS_VERSION_EVENT, payload);
-
-  return G_SOURCE_REMOVE;
-}
-
-static void
-check_cmdline (gboolean *is_live_boot,
-               gboolean *is_dual_boot)
-{
-  g_autofree gchar *cmdline = NULL;
-  g_autoptr(GError) error = NULL;
-
-  *is_live_boot = FALSE;
-  *is_dual_boot = FALSE;
-
-  if (!g_file_get_contents (KERNEL_CMDLINE_PATH, &cmdline, NULL, &error))
-    {
-      g_warning ("Error reading " KERNEL_CMDLINE_PATH ": %s", error->message);
-    }
-  else if (g_regex_match_simple (LIVE_BOOT_FLAG_REGEX, cmdline, 0, 0))
-    {
-      *is_live_boot = TRUE;
-    }
-  else if (g_regex_match_simple (DUAL_BOOT_FLAG_REGEX, cmdline, 0, 0))
-    {
-      *is_dual_boot = TRUE;
-    }
-}
-
-static gboolean
-record_live_boot (gpointer unused)
-{
-  gboolean is_live_boot, is_dual_boot;
-
-  check_cmdline (&is_live_boot, &is_dual_boot);
-
-  if (is_live_boot)
-    emtr_event_recorder_record_event (emtr_event_recorder_get_default (),
-                                      LIVE_BOOT_EVENT, NULL);
-  else if (is_dual_boot)
-    emtr_event_recorder_record_event (emtr_event_recorder_get_default (),
-                                      DUAL_BOOT_EVENT, NULL);
-
-  return G_SOURCE_REMOVE;
-}
-
-static gchar *
-get_image_version_for_path (const gchar *path)
-{
-  ssize_t xattr_size;
-  g_autofree gchar *image_version = NULL;
-
-  xattr_size = getxattr (path, EOS_IMAGE_VERSION_XATTR, NULL, 0);
-
-  if (xattr_size < 0 || xattr_size > SSIZE_MAX - 1)
-    return NULL;
-
-  image_version = g_malloc0 (xattr_size + 1);
-
-  xattr_size = getxattr (path, EOS_IMAGE_VERSION_XATTR,
-                         image_version, xattr_size);
-
-  /* this check is primarily for ERANGE, in case the attribute size has
-   * changed from the first call to this one */
-  if (xattr_size < 0)
-    {
-      g_warning ("Error when getting 'eos-image-version' from %s: %s", path,
-                 strerror (errno));
-      return NULL;
-    }
-
-  /* shouldn't happen, but if the filesystem is modified or corrupted, we
-   * don't want to cause assertion errors / D-Bus disconnects with invalid
-   * UTF-8 strings */
-  if (!g_utf8_validate (image_version, xattr_size, NULL))
-    {
-      g_warning ("Invalid UTF-8 when getting 'eos-image-version' from %s",
-                 path);
-      return NULL;
-    }
-
-  return g_steal_pointer (&image_version);
-}
-
-static gchar *
-get_image_version (void)
-{
-  gchar *image_version = get_image_version_for_path (EOS_IMAGE_VERSION_PATH);
-
-  if (image_version == NULL)
-    image_version = get_image_version_for_path (EOS_IMAGE_VERSION_ALT_PATH);
-
-  return image_version;
-}
-
-static gboolean
-record_image_version (const char *image_version)
-{
-  if (image_version != NULL)
-    emtr_event_recorder_record_event (emtr_event_recorder_get_default (),
-                                      EOS_IMAGE_VERSION_EVENT,
-                                      g_variant_new_string (image_version));
-
-  return G_SOURCE_REMOVE;
-}
 
 /*
  * Handle a signal from the systemd manager by recording the StartupFinished
@@ -584,19 +417,12 @@ main (gint                argc,
 {
   g_datalist_init (&humanity_by_session_id);
 
-  g_autofree char *image_version = get_image_version ();
-
   GDBusProxy *systemd_dbus_proxy = systemd_dbus_proxy_new ();
   GDBusProxy *login_dbus_proxy = login_dbus_proxy_new ();
-  GFileMonitor *location_file_monitor = location_file_monitor_new ();
 
   GMainLoop *main_loop = g_main_loop_new (NULL, TRUE);
 
-  g_idle_add ((GSourceFunc) record_os_version, NULL);
   g_idle_add ((GSourceFunc) increment_boot_count, NULL);
-  g_idle_add ((GSourceFunc) record_live_boot, NULL);
-  g_idle_add ((GSourceFunc) record_image_version, image_version);
-  g_idle_add ((GSourceFunc) record_location_label, NULL);
 
   eins_hwinfo_start ();
 
@@ -613,7 +439,6 @@ main (gint                argc,
   g_main_loop_unref (main_loop);
   g_clear_object (&systemd_dbus_proxy);
   g_clear_object (&login_dbus_proxy);
-  g_clear_object (&location_file_monitor);
 
   return EXIT_SUCCESS;
 }
