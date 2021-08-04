@@ -50,6 +50,8 @@ tests_test_persistent_tally_LDADD = $(TEST_LIBS)
 tests_test_hwinfo_SOURCES = \
 	src/eins-hwinfo.h \
 	src/eins-hwinfo.c \
+	src/eins-boottime-source.h \
+	src/eins-boottime-source.c \
 	tests/test-hwinfo.c \
 	$(NULL)
 
