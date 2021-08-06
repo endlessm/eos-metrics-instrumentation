@@ -29,6 +29,8 @@ src_eos_metrics_instrumentation_SOURCES = \
 	src/eins-network-id.c \
 	src/eins-persistent-tally.h \
 	src/eins-persistent-tally.c \
+	src/eins-boottime-source.h \
+	src/eins-boottime-source.c \
 	$(NULL)
 
 # Pre-processor flags

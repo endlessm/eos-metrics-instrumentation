@@ -17,6 +17,7 @@
  * <http://www.gnu.org/licenses/>.
  */
 #include "eins-hwinfo.h"
+#include "eins-boottime-source.h"
 
 #include <eosmetrics/eosmetrics.h>
 #include <gio/gio.h>
@@ -34,9 +35,6 @@
  */
 
 #define COMPUTER_HWINFO_EVENT "81f303aa-448d-443d-97f9-8d8a9169321c"
-
-/* 24 hours */
-#define RECORD_COMPUTER_HWINFO_INTERVAL_SECONDS (60u * 60u * 24u)
 
 /*
  * RAM:
@@ -102,6 +100,57 @@
 
 #define COMPUTER_HWINFO_TYPE_STRING "(" RAMINFO_TYPE_STRING \
   ROOTFS_SPACE_TYPE_STRING "@" CPUINFO_ARRAY_TYPE_STRING ")"
+
+/* 24 hours */
+#define RECORD_COMPUTER_HWINFO_INTERVAL_USECONDS (G_USEC_PER_SEC * 60u * 60u * 24u)
+
+/* The path of a file to hold next record time. */
+#define RECORD_TIME_FILE_PATH INSTRUMENTATION_CACHE_DIR "record_time"
+
+static gint64
+get_next_record_time (void)
+{
+  g_autoptr(GKeyFile) kf = g_key_file_new ();
+
+  if (g_key_file_load_from_file (kf,
+                                 RECORD_TIME_FILE_PATH,
+                                 G_KEY_FILE_NONE,
+                                 NULL))
+    return g_key_file_get_int64 (kf, "hwinfo", "next-record-time", NULL);
+
+  return 0;
+}
+
+/* Get wait time in microseconds */
+static guint64
+get_wait_time_for_next_record (void)
+{
+  gint64 now, record;
+
+  record = get_next_record_time ();
+  now = g_get_real_time ();
+
+  if (now < record)
+    return record - now;
+  else
+    return 0;
+}
+
+static void
+set_next_record_time (void)
+{
+  g_autoptr(GKeyFile) kf = g_key_file_new ();
+  guint64 now, next;
+  g_autoptr(GError) error = NULL;
+
+  now = g_get_real_time ();
+  next = now + RECORD_COMPUTER_HWINFO_INTERVAL_USECONDS;
+
+  g_key_file_set_uint64 (kf, "hwinfo", "next-record-time", next);
+
+  if (!g_key_file_save_to_file (kf, RECORD_TIME_FILE_PATH, &error))
+    g_warning ("Failed to write " RECORD_TIME_FILE_PATH ": %s", error->message);
+}
 
 static guint32
 round_to_nearest (guint64 size,
@@ -386,7 +435,7 @@ eins_hwinfo_get_computer_hwinfo (void)
 }
 
 static gboolean
-record_computer_hwinfo (gpointer unused)
+record_computer_hwinfo (gpointer is_first_call)
 {
   GVariant *payload = eins_hwinfo_get_computer_hwinfo ();
 
@@ -394,18 +443,34 @@ record_computer_hwinfo (gpointer unused)
     emtr_event_recorder_record_event (emtr_event_recorder_get_default (),
                                       COMPUTER_HWINFO_EVENT,
                                       g_steal_pointer (&payload));
+  set_next_record_time ();
+
+  /* The interval of first record after each boot usually is not 24 hours. */
+  if (is_first_call)
+    {
+      eins_boottimeout_add_useconds (RECORD_COMPUTER_HWINFO_INTERVAL_USECONDS,
+                                     record_computer_hwinfo,
+                                     GUINT_TO_POINTER (FALSE));
+      return G_SOURCE_REMOVE;
+    }
+
   return G_SOURCE_CONTINUE;
 }
 
 static void
 start_recording_record_computer_hwinfo (void)
 {
-  record_computer_hwinfo (NULL);
+  guint64 wait = get_wait_time_for_next_record ();
 
-  /* Record the computer hardware info every 24 hours. */
-  g_timeout_add_seconds (RECORD_COMPUTER_HWINFO_INTERVAL_SECONDS,
-                         record_computer_hwinfo,
-                         NULL);
+  if (wait > 0)
+    {
+      eins_boottimeout_add_useconds (wait,
+                                     record_computer_hwinfo,
+                                     GUINT_TO_POINTER (TRUE));
+      return;
+    }
+
+  record_computer_hwinfo (GUINT_TO_POINTER (TRUE));
 }
 
 /* The presence of this file indicates that the first-boot resize of the root
