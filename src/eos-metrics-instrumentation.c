@@ -39,17 +39,20 @@
 #define BOOT_COUNT_KEY "boot_count"
 
 /*
- * Started when a user logs in and stopped when that user logs out.
- * Payload contains the user ID of the user that logged in.
- * (Thus the payload is a GVariant containing a single unsigned 32-bit integer.)
+ * The event ID to record user session's alive time from login to logout.
+ * https://azafea.readthedocs.io/en/latest/events.html#azafea.event_processors.endless.metrics.v3.model.DailySessionTime
  */
-#define USER_IS_LOGGED_IN "add052be-7b2a-4959-81a5-a7f45062ee98"
+#define DAILY_SESSION_TIME "5dc0b53c-93f9-4df0-ad6f-bd25e9fe638f"
 
 #define MIN_HUMAN_USER_ID 1000
 
 static EinsPersistentTally *persistent_tally;
 
-static GData *humanity_by_session_id;
+/*
+ * Map from user ID of logged-in user (guint32) to EmtrAggregateTimer (owned
+ * by hash table).
+ */
+static GHashTable *session_by_user_id;
 
 /*
  * Handle a signal from the systemd manager by recording the StartupFinished
@@ -158,165 +161,60 @@ systemd_dbus_proxy_new (void)
   return dbus_proxy;
 }
 
-/*
- * Populate user_id with the user ID of the user associated with the given
- * logind session object at session_path. user_id must already be allocated
- * and non-NULL. Return TRUE if user_id was successfully populated and
- * FALSE otherwise, in which case its contents should be ignored.
- */
-static gboolean
-get_user_id (const gchar *session_path,
-             guint32     *user_id)
+static gpointer
+userid_to_key (guint32 user_id)
 {
-  GError *error = NULL;
-  GDBusProxy *dbus_proxy =
-    g_dbus_proxy_new_for_bus_sync (G_BUS_TYPE_SYSTEM,
-                                   G_DBUS_PROXY_FLAGS_NONE,
-                                   NULL /* GDBusInterfaceInfo */,
-                                   "org.freedesktop.login1",
-                                   session_path,
-                                   "org.freedesktop.DBus.Properties",
-                                   NULL /* GCancellable */,
-                                   &error);
-
-  if (dbus_proxy == NULL)
-    {
-      g_warning ("Error creating GDBusProxy: %s.", error->message);
-      g_error_free (error);
-      return FALSE;
-    }
-
-  GVariant *get_user_args =
-    g_variant_new_parsed ("('org.freedesktop.login1.Session', 'User')");
-  GVariant *user_result = g_dbus_proxy_call_sync (dbus_proxy,
-                                                  "Get",
-                                                  get_user_args,
-                                                  G_DBUS_CALL_FLAGS_NONE,
-                                                  -1 /* timeout */,
-                                                  NULL /* GCancellable */,
-                                                  &error);
-  g_object_unref (dbus_proxy);
-
-  if (user_result == NULL)
-    {
-      g_warning ("Error getting user ID: %s.", error->message);
-      g_error_free (error);
-      return FALSE;
-    }
-
-  GVariant *user_variant = g_variant_get_child_value (user_result, 0);
-  g_variant_unref (user_result);
-  GVariant *user_tuple = g_variant_get_child_value (user_variant, 0);
-  g_variant_unref (user_variant);
-  g_variant_get_child (user_tuple, 0, "u", user_id);
-  g_variant_unref (user_tuple);
-  return TRUE;
-}
-
-static gboolean
-is_human_session (const gchar *session_id)
-{
-  /* All normal user sessions start with digits -- greeter sessions
-   * start with 'c'.
-   */
-  return g_ascii_isdigit (session_id[0]);
-}
-
-static gboolean
-session_in_set (const gchar *session_id)
-{
-  gpointer data = g_datalist_get_data (&humanity_by_session_id, session_id);
-  return (gboolean) GPOINTER_TO_UINT (data);
+  return GUINT_TO_POINTER (user_id);
 }
 
 /*
- * If the given session_id corresponds to a human session not already in the
- * set, return TRUE and add the corresponding session_id to the
- * humanity_by_session_id set. Otherwise, return FALSE.
- */
-static gboolean
-add_session_to_set (const gchar *session_id)
-{
-  if (!is_human_session (session_id) || session_in_set (session_id))
-    return FALSE;
-
-  g_datalist_set_data (&humanity_by_session_id, session_id,
-                       GUINT_TO_POINTER (TRUE));
-  return TRUE;
-}
-
-/*
- * If the given session_id corresponds to a human session tracked inside the
- * humanity_by_session_id set, remove it and return TRUE. Otherwise, return
- * FALSE.
- */
-static gboolean
-remove_session_from_set (const gchar *session_id)
-{
-  if (!is_human_session (session_id) || !session_in_set (session_id))
-    return FALSE;
-
-  g_datalist_remove_data (&humanity_by_session_id, session_id);
-  return TRUE;
-}
-
-/*
- * Intended for use as a GDataForeachFunc callback. Synchronously records a
- * logout for the given session ID.
+ * Create a new session for the user, then start the corresponding aggregate
+ * timer.
  */
 static void
-record_stop_for_login (GQuark   session_id_quark,
-                       gpointer unused,
-                       gpointer user_data)
+add_session (guint32 user_id)
 {
-  const gchar *session_id = g_quark_to_string (session_id_quark);
-  GVariant *session_id_variant = g_variant_new_string (session_id);
-  emtr_event_recorder_record_stop_sync (emtr_event_recorder_get_default (),
-                                        USER_IS_LOGGED_IN,
-                                        session_id_variant,
-                                        NULL /* auxiliary_payload */);
-}
+  EmtrAggregateTimer *timer = NULL;
 
-static void
-add_session (const gchar *session_id,
-             guint32      user_id)
-{
-  if (!add_session_to_set (session_id))
+  /*  Only care about real humans */
+  if (user_id < MIN_HUMAN_USER_ID)
     return;
 
-  GVariant *user_id_variant =
-    (user_id >= MIN_HUMAN_USER_ID) ? g_variant_new_uint32 (user_id) : NULL;
-
-  emtr_event_recorder_record_start (emtr_event_recorder_get_default (),
-                                    USER_IS_LOGGED_IN,
-                                    g_variant_new_string (session_id),
-                                    user_id_variant);
-}
-
-static void
-remove_session (const gchar *session_id)
-{
-  if (!remove_session_from_set (session_id))
-    return;
-
-  emtr_event_recorder_record_stop_sync (emtr_event_recorder_get_default (),
-                                        USER_IS_LOGGED_IN,
-                                        g_variant_new_string (session_id),
-                                        NULL /* auxiliary_payload */);
+  timer = emtr_event_recorder_start_aggregate_timer (emtr_event_recorder_get_default (),
+                                                     DAILY_SESSION_TIME,
+                                                     g_variant_new_uint32 (user_id),
+                                                     NULL);
+  if (timer == NULL)
+    {
+      g_warning ("Failed to start an aggregate timer for user %u", user_id);
+    }
+  else {
+    g_hash_table_insert (session_by_user_id, userid_to_key (user_id), timer);
+  }
 }
 
 /*
- * Handle a signal from the login manager by recording login/logout pairs. Make
- * the aggressive assumption that all sessions end when the PrepareForShutdown
- * signal is sent with parameter TRUE. This isn't necessarily a valid assumption
- * because the shutdown can be cancelled, but in practice we don't get the
- * SessionRemoved signal in time if the user shuts down without first logging
- * out.
+ * Stop the corresponding aggregate timer, then remove the session.
+ */
+static void
+remove_session (guint32 user_id)
+{
+  /* The timer will stop itself when its reference count falls to 0. */
+  g_hash_table_remove (session_by_user_id, userid_to_key (user_id));
+}
+
+/*
+ * Handle the pair of UserNew and UserRemoved signals from the login manager,
+ * emitted when the user's first concurrent session begins and last concurrent
+ * session ends (respectively), to record cumulative session time for each
+ * user.
  *
- * Recording of logins must be 1:1 with recording of logouts, so each time
- * we record a login we add the session ID to the humanity_by_session_id set,
- * and each time we record a logout we remove the session ID from the
- * humanity_by_session_id set.
+ * The login manager guarantees that these signals are emitted in pairs,
+ * so we start a timer and store it in a hash table on UserNew, and stop &
+ * remove it on UserRemoved.
+ *
+ * TODO: Pause timers when users' sessions are all idle, such as when the
+ * screen is locked or another user is actively using the system.
  */
 static void
 record_login (GDBusProxy *dbus_proxy,
@@ -325,33 +223,18 @@ record_login (GDBusProxy *dbus_proxy,
               GVariant   *parameters,
               gpointer    user_data)
 {
-  if (strcmp ("SessionRemoved", signal_name) == 0)
+  guint32 user_id;
+
+  if (strcmp ("UserNew", signal_name) == 0)
     {
-      const gchar *session_id;
-      g_variant_get (parameters, "(&s&o)", &session_id, NULL);
-
-      remove_session (session_id);
+      g_variant_get (parameters, "(u&o)", &user_id, NULL);
+      add_session (user_id);
     }
-  else if (strcmp ("SessionNew", signal_name) == 0)
+  else if (strcmp ("UserRemoved", signal_name) == 0)
     {
-      const gchar *session_id, *session_path;
-      g_variant_get (parameters, "(&s&o)", &session_id, &session_path);
-
-      guint32 user_id;
-      if (!get_user_id (session_path, &user_id))
-        return;
-
-      add_session (session_id, user_id);
+      g_variant_get (parameters, "(u&o)", &user_id, NULL);
+      remove_session (user_id);
     }
-}
-
-static void
-record_logout_for_all_remaining_sessions (void)
-{
-  g_datalist_foreach (&humanity_by_session_id,
-                      (GDataForeachFunc) record_stop_for_login,
-                      NULL /* user_data */);
-  g_datalist_clear (&humanity_by_session_id);
 }
 
 static GDBusProxy *
@@ -377,29 +260,24 @@ login_dbus_proxy_new (void)
   g_signal_connect (dbus_proxy, "g-signal", G_CALLBACK (record_login),
                     NULL /* data */);
 
-  GVariant *sessions =
-    g_dbus_proxy_call_sync (dbus_proxy, "ListSessions", NULL,
+  GVariant *users =
+    g_dbus_proxy_call_sync (dbus_proxy, "ListUsers", NULL,
                             G_DBUS_CALL_FLAGS_NONE, -1, NULL, &error);
   if (error)
     {
-      g_warning ("Error calling ListSessions: %s.", error->message);
+      g_warning ("Error calling ListUsers: %s.", error->message);
       g_error_free (error);
       return NULL;
     }
 
-  GVariantIter *session_iter;
-  g_variant_get (sessions, "(a(susso))", &session_iter);
+  g_autoptr(GVariantIter) user_iter = NULL;
+  g_variant_get (users, "(a(uso))", &user_iter);
 
-  const gchar *session_id;
   guint32 user_id;
-  while (g_variant_iter_loop (session_iter, "(&suss&o)", &session_id,
-                              &user_id, NULL, NULL, NULL))
+  while (g_variant_iter_loop (user_iter, "(us&o)", &user_id, NULL, NULL))
     {
-      add_session (session_id, user_id);
+      add_session (user_id);
     }
-
-  g_variant_iter_free (session_iter);
-  g_variant_unref (sessions);
 
   return dbus_proxy;
 }
@@ -415,7 +293,7 @@ gint
 main (gint                argc,
       const gchar * const argv[])
 {
-  g_datalist_init (&humanity_by_session_id);
+  session_by_user_id = g_hash_table_new (g_direct_hash, g_direct_equal);
 
   GDBusProxy *systemd_dbus_proxy = systemd_dbus_proxy_new ();
   GDBusProxy *login_dbus_proxy = login_dbus_proxy_new ();
@@ -434,7 +312,12 @@ main (gint                argc,
 
   g_main_loop_run (main_loop);
 
-  record_logout_for_all_remaining_sessions ();
+  /*
+   * Remove all remained login records for killing this daemon, for example
+   * poweroff system.
+   */
+  g_hash_table_remove_all (session_by_user_id);
+  g_hash_table_unref (session_by_user_id);
 
   g_main_loop_unref (main_loop);
   g_clear_object (&systemd_dbus_proxy);
