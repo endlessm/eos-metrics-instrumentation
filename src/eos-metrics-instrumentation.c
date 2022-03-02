@@ -26,7 +26,6 @@
 #include <eosmetrics/eosmetrics.h>
 
 #include "eins-hwinfo.h"
-#include "eins-persistent-tally.h"
 
 /*
  * Recorded when startup has finished as defined by the systemd manager DBus
@@ -45,8 +44,6 @@
 #define DAILY_SESSION_TIME "5dc0b53c-93f9-4df0-ad6f-bd25e9fe638f"
 
 #define MIN_HUMAN_USER_ID 1000
-
-static EinsPersistentTally *persistent_tally;
 
 /*
  * Map from user ID of logged-in user (guint32) to EmtrAggregateTimer (owned
@@ -88,29 +85,6 @@ record_startup (GDBusProxy *dbus_proxy,
 
       g_variant_unref (unsubscribe_result);
     }
-}
-
-static gboolean
-increment_boot_count (gpointer unused)
-{
-  const gchar *tally_file_override = g_getenv ("EOS_INSTRUMENTATION_CACHE");
-  GError *error = NULL;
-  if (tally_file_override != NULL)
-    persistent_tally =
-      eins_persistent_tally_new_full (tally_file_override, &error);
-  else
-    persistent_tally = eins_persistent_tally_new (&error);
-
-  if (persistent_tally == NULL)
-    {
-      g_warning ("Could not create persistent tally object: %s.",
-                 error->message);
-      g_error_free (error);
-      return G_SOURCE_REMOVE;
-    }
-
-  eins_persistent_tally_add_to_tally (persistent_tally, BOOT_COUNT_KEY, 1);
-  return G_SOURCE_REMOVE;
 }
 
 /*
@@ -299,8 +273,6 @@ main (gint                argc,
   GDBusProxy *login_dbus_proxy = login_dbus_proxy_new ();
 
   GMainLoop *main_loop = g_main_loop_new (NULL, TRUE);
-
-  g_idle_add ((GSourceFunc) increment_boot_count, NULL);
 
   eins_hwinfo_start ();
 
