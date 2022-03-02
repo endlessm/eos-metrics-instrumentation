@@ -59,10 +59,10 @@ static GHashTable *session_by_user_id;
  */
 static void
 record_startup (GDBusProxy *dbus_proxy,
-                gchar      *sender_name,
+                gchar      *sender_name G_GNUC_UNUSED,
                 gchar      *signal_name,
                 GVariant   *parameters,
-                gpointer    user_data)
+                gpointer    user_data G_GNUC_UNUSED)
 {
   if (strcmp (signal_name, "StartupFinished") == 0)
     {
@@ -191,11 +191,11 @@ remove_session (guint32 user_id)
  * screen is locked or another user is actively using the system.
  */
 static void
-record_login (GDBusProxy *dbus_proxy,
-              gchar      *sender_name,
-              gchar      *signal_name,
-              GVariant   *parameters,
-              gpointer    user_data)
+record_login (GDBusProxy *dbus_proxy   G_GNUC_UNUSED,
+              gchar      *sender_name  G_GNUC_UNUSED,
+              gchar                   *signal_name,
+              GVariant                *parameters,
+              gpointer    user_data    G_GNUC_UNUSED)
 {
   guint32 user_id;
 
@@ -264,9 +264,19 @@ quit_main_loop (GMainLoop *main_loop)
 }
 
 gint
-main (gint                argc,
-      const gchar * const argv[])
+main (gint  argc,
+      char *argv[])
 {
+  g_autoptr(GOptionContext) context = NULL;
+  g_autoptr(GError) error = NULL;
+
+  context = g_option_context_new ("- record metrics for systemwide events");
+  if (!g_option_context_parse (context, &argc, &argv, &error))
+    {
+      g_printerr ("option parsing failed: %s\n", error->message);
+      exit (1);
+    }
+
   session_by_user_id = g_hash_table_new (g_direct_hash, g_direct_equal);
 
   GDBusProxy *systemd_dbus_proxy = systemd_dbus_proxy_new ();

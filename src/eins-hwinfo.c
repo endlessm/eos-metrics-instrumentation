@@ -485,15 +485,15 @@ start_recording_record_computer_hwinfo (void)
 static void
 boot_finished_cb (GFileMonitor     *monitor,
                   GFile            *booted,
-                  GFile            *other_file,
+                  GFile            *other_file G_GNUC_UNUSED,
                   GFileMonitorEvent event_type,
                   gpointer          user_data)
 {
   /* Any event will do */
-  g_debug ("got (GFileMonitorEvent) %d for %s", event_type, BOOTED_FLAG_FILE_PATH);
+  g_debug ("got (GFileMonitorEvent) %d for %s", event_type, g_file_peek_path (booted));
   start_recording_record_computer_hwinfo ();
 
-  g_signal_handlers_disconnect_by_func (monitor, boot_finished_cb, NULL);
+  g_signal_handlers_disconnect_by_func (monitor, boot_finished_cb, user_data);
   g_object_unref (monitor);
 }
 
@@ -504,7 +504,7 @@ boot_finished_cb (GFileMonitor     *monitor,
  */
 
 static gboolean
-start_recording_computer_info_when_booted (gpointer data)
+start_recording_computer_info_when_booted (gpointer data G_GNUC_UNUSED)
 {
   g_autoptr(GFile) booted = g_file_new_for_path (BOOTED_FLAG_FILE_PATH);
   g_autoptr(GFileMonitor) monitor = NULL;
