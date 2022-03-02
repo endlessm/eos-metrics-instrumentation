@@ -305,7 +305,6 @@ eins_hwinfo_parse_lscpu_json (const gchar *json_data,
   JsonNode *root, *lscpu_node;
   JsonObject *root_object;
   JsonArray *lscpu_array;
-  int i, n;
   /* (const gchar *) => (const gchar *), both borrowed from JSON-land */
   g_autoptr(GHashTable) fields = g_hash_table_new (g_str_hash, g_str_equal);
   GVariant *elements[NUM_LSCPU_FIELDS];
@@ -332,6 +331,8 @@ eins_hwinfo_parse_lscpu_json (const gchar *json_data,
     }
   else
     {
+      guint i, n;
+
       for (i = 0, n = json_array_get_length (lscpu_array); i < n; i++)
         {
           JsonNode *element_node = json_array_get_element (lscpu_array, i);
@@ -359,7 +360,7 @@ eins_hwinfo_parse_lscpu_json (const gchar *json_data,
         }
     }
 
-  for (i = 0; i < NUM_LSCPU_FIELDS; i++)
+  for (gsize i = 0; i < NUM_LSCPU_FIELDS; i++)
     {
       const LscpuFieldType *ft = &LSCPU_FIELDS[i];
       const gchar * const *name = ft->names;
