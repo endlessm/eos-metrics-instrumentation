@@ -161,7 +161,7 @@ round_to_nearest (guint64 size,
   else
     size += divisor / 2;
 
-  return (guint32) CLAMP (size / divisor, 0, G_MAXUINT32);
+  return (guint32) MIN (size / divisor, G_MAXUINT32);
 }
 
 guint32
