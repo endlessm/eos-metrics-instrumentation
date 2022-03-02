@@ -3,7 +3,6 @@ Section: misc
 Priority: standard
 Maintainer: Endless OS Team <maintainers@endlessos.org>
 Build-Depends:
-	autotools-dev,
 	debhelper-compat (= 13),
 	eos-metrics-0-dev (>= 0.3.0),
 	libflatpak-dev,
