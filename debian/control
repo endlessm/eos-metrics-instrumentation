@@ -1,9 +1,9 @@
 Source: eos-metrics-instrumentation
 Section: misc
 Priority: standard
-Maintainer: Kurt von Laven <kurt@endlessm.com>
-Build-Depends: debhelper (>= 9),
-	autotools-dev,
+Maintainer: Endless OS Team <maintainers@endlessos.org>
+Build-Depends:
+	debhelper-compat (= 13),
 	eos-metrics-0-dev (>= 0.3.0),
 	libflatpak-dev,
 	libglib2.0-dev,
@@ -21,7 +21,7 @@ Architecture: any
 Depends: ${shlibs:Depends}, ${misc:Depends},
 	systemd (>= 200),
 	util-linux (>= 2.32),
-Description: Metrics instrumentation for EndlessOS
+Description: Metrics instrumentation for Endless OS
  This package contains system and session daemons
  that record metrics using data collected from
  DBus.
