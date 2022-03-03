@@ -161,7 +161,7 @@ round_to_nearest (guint64 size,
   else
     size += divisor / 2;
 
-  return (guint32) CLAMP (size / divisor, 0, G_MAXUINT32);
+  return (guint32) MIN (size / divisor, G_MAXUINT32);
 }
 
 guint32
@@ -305,7 +305,6 @@ eins_hwinfo_parse_lscpu_json (const gchar *json_data,
   JsonNode *root, *lscpu_node;
   JsonObject *root_object;
   JsonArray *lscpu_array;
-  int i, n;
   /* (const gchar *) => (const gchar *), both borrowed from JSON-land */
   g_autoptr(GHashTable) fields = g_hash_table_new (g_str_hash, g_str_equal);
   GVariant *elements[NUM_LSCPU_FIELDS];
@@ -332,6 +331,8 @@ eins_hwinfo_parse_lscpu_json (const gchar *json_data,
     }
   else
     {
+      guint i, n;
+
       for (i = 0, n = json_array_get_length (lscpu_array); i < n; i++)
         {
           JsonNode *element_node = json_array_get_element (lscpu_array, i);
@@ -359,7 +360,7 @@ eins_hwinfo_parse_lscpu_json (const gchar *json_data,
         }
     }
 
-  for (i = 0; i < NUM_LSCPU_FIELDS; i++)
+  for (gsize i = 0; i < NUM_LSCPU_FIELDS; i++)
     {
       const LscpuFieldType *ft = &LSCPU_FIELDS[i];
       const gchar * const *name = ft->names;
@@ -484,15 +485,15 @@ start_recording_record_computer_hwinfo (void)
 static void
 boot_finished_cb (GFileMonitor     *monitor,
                   GFile            *booted,
-                  GFile            *other_file,
+                  GFile            *other_file G_GNUC_UNUSED,
                   GFileMonitorEvent event_type,
                   gpointer          user_data)
 {
   /* Any event will do */
-  g_debug ("got (GFileMonitorEvent) %d for %s", event_type, BOOTED_FLAG_FILE_PATH);
+  g_debug ("got (GFileMonitorEvent) %d for %s", event_type, g_file_peek_path (booted));
   start_recording_record_computer_hwinfo ();
 
-  g_signal_handlers_disconnect_by_func (monitor, boot_finished_cb, NULL);
+  g_signal_handlers_disconnect_by_func (monitor, boot_finished_cb, user_data);
   g_object_unref (monitor);
 }
 
@@ -503,7 +504,7 @@ boot_finished_cb (GFileMonitor     *monitor,
  */
 
 static gboolean
-start_recording_computer_info_when_booted (gpointer data)
+start_recording_computer_info_when_booted (gpointer data G_GNUC_UNUSED)
 {
   g_autoptr(GFile) booted = g_file_new_for_path (BOOTED_FLAG_FILE_PATH);
   g_autoptr(GFileMonitor) monitor = NULL;

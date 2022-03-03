@@ -26,7 +26,6 @@
 #include <eosmetrics/eosmetrics.h>
 
 #include "eins-hwinfo.h"
-#include "eins-persistent-tally.h"
 
 /*
  * Recorded when startup has finished as defined by the systemd manager DBus
@@ -46,8 +45,6 @@
 
 #define MIN_HUMAN_USER_ID 1000
 
-static EinsPersistentTally *persistent_tally;
-
 /*
  * Map from user ID of logged-in user (guint32) to EmtrAggregateTimer (owned
  * by hash table).
@@ -62,10 +59,10 @@ static GHashTable *session_by_user_id;
  */
 static void
 record_startup (GDBusProxy *dbus_proxy,
-                gchar      *sender_name,
+                gchar      *sender_name G_GNUC_UNUSED,
                 gchar      *signal_name,
                 GVariant   *parameters,
-                gpointer    user_data)
+                gpointer    user_data G_GNUC_UNUSED)
 {
   if (strcmp (signal_name, "StartupFinished") == 0)
     {
@@ -88,29 +85,6 @@ record_startup (GDBusProxy *dbus_proxy,
 
       g_variant_unref (unsubscribe_result);
     }
-}
-
-static gboolean
-increment_boot_count (gpointer unused)
-{
-  const gchar *tally_file_override = g_getenv ("EOS_INSTRUMENTATION_CACHE");
-  GError *error = NULL;
-  if (tally_file_override != NULL)
-    persistent_tally =
-      eins_persistent_tally_new_full (tally_file_override, &error);
-  else
-    persistent_tally = eins_persistent_tally_new (&error);
-
-  if (persistent_tally == NULL)
-    {
-      g_warning ("Could not create persistent tally object: %s.",
-                 error->message);
-      g_error_free (error);
-      return G_SOURCE_REMOVE;
-    }
-
-  eins_persistent_tally_add_to_tally (persistent_tally, BOOT_COUNT_KEY, 1);
-  return G_SOURCE_REMOVE;
 }
 
 /*
@@ -217,11 +191,11 @@ remove_session (guint32 user_id)
  * screen is locked or another user is actively using the system.
  */
 static void
-record_login (GDBusProxy *dbus_proxy,
-              gchar      *sender_name,
-              gchar      *signal_name,
-              GVariant   *parameters,
-              gpointer    user_data)
+record_login (GDBusProxy *dbus_proxy   G_GNUC_UNUSED,
+              gchar      *sender_name  G_GNUC_UNUSED,
+              gchar                   *signal_name,
+              GVariant                *parameters,
+              gpointer    user_data    G_GNUC_UNUSED)
 {
   guint32 user_id;
 
@@ -290,17 +264,25 @@ quit_main_loop (GMainLoop *main_loop)
 }
 
 gint
-main (gint                argc,
-      const gchar * const argv[])
+main (gint  argc,
+      char *argv[])
 {
+  g_autoptr(GOptionContext) context = NULL;
+  g_autoptr(GError) error = NULL;
+
+  context = g_option_context_new ("- record metrics for systemwide events");
+  if (!g_option_context_parse (context, &argc, &argv, &error))
+    {
+      g_printerr ("option parsing failed: %s\n", error->message);
+      exit (1);
+    }
+
   session_by_user_id = g_hash_table_new (g_direct_hash, g_direct_equal);
 
   GDBusProxy *systemd_dbus_proxy = systemd_dbus_proxy_new ();
   GDBusProxy *login_dbus_proxy = login_dbus_proxy_new ();
 
   GMainLoop *main_loop = g_main_loop_new (NULL, TRUE);
-
-  g_idle_add ((GSourceFunc) increment_boot_count, NULL);
 
   eins_hwinfo_start ();
 

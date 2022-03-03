@@ -25,10 +25,6 @@ src_eos_metrics_instrumentation_SOURCES = \
 	src/eos-metrics-instrumentation.c \
 	src/eins-hwinfo.h \
 	src/eins-hwinfo.c \
-	src/eins-network-id.h \
-	src/eins-network-id.c \
-	src/eins-persistent-tally.h \
-	src/eins-persistent-tally.c \
 	src/eins-boottime-source.h \
 	src/eins-boottime-source.c \
 	$(NULL)
