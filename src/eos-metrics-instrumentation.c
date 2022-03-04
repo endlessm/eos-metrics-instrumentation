@@ -154,10 +154,10 @@ add_session (guint32 user_id)
   if (user_id < MIN_HUMAN_USER_ID)
     return;
 
-  timer = emtr_event_recorder_start_aggregate_timer (emtr_event_recorder_get_default (),
-                                                     DAILY_SESSION_TIME,
-                                                     g_variant_new_uint32 (user_id),
-                                                     NULL);
+  timer = emtr_event_recorder_start_aggregate_timer_with_uid (emtr_event_recorder_get_default (),
+                                                              user_id,
+                                                              DAILY_SESSION_TIME,
+                                                              NULL);
   if (timer == NULL)
     {
       g_warning ("Failed to start an aggregate timer for user %u", user_id);
