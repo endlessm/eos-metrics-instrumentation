@@ -10,7 +10,7 @@ Build-Depends:
 	libgtop2-dev,
 	libjson-glib-dev,
 	libostree-dev,
-	dh-autoreconf,
+	meson,
 	python3-dbus,
 	python3-dbusmock,
 	util-linux (>= 2.32),
