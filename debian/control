@@ -24,4 +24,4 @@ Depends: ${shlibs:Depends}, ${misc:Depends},
 Description: Metrics instrumentation for Endless OS
  This package contains system and session daemons
  that record metrics using data collected from
- DBus.
+ D-Bus.
