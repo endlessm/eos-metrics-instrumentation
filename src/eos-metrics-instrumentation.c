@@ -277,7 +277,7 @@ main (gint  argc,
       exit (1);
     }
 
-  session_by_user_id = g_hash_table_new (NULL, NULL);
+  session_by_user_id = g_hash_table_new_full (NULL, NULL, NULL, g_object_unref);
 
   GDBusProxy *systemd_dbus_proxy = systemd_dbus_proxy_new ();
   GDBusProxy *login_dbus_proxy = login_dbus_proxy_new ();
