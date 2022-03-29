@@ -174,7 +174,8 @@ static void
 remove_session (guint32 user_id)
 {
   /* The timer will stop itself when its reference count falls to 0. */
-  g_hash_table_remove (session_by_user_id, userid_to_key (user_id));
+  gboolean removed = g_hash_table_remove (session_by_user_id, userid_to_key (user_id));
+  g_assert (removed);
 }
 
 /*
@@ -277,7 +278,7 @@ main (gint  argc,
       exit (1);
     }
 
-  session_by_user_id = g_hash_table_new (g_direct_hash, g_direct_equal);
+  session_by_user_id = g_hash_table_new_full (NULL, NULL, NULL, g_object_unref);
 
   GDBusProxy *systemd_dbus_proxy = systemd_dbus_proxy_new ();
   GDBusProxy *login_dbus_proxy = login_dbus_proxy_new ();
