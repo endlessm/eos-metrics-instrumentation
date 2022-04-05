@@ -179,7 +179,9 @@ remove_session (guint32 user_id)
 
   /* The timer will stop itself when its reference count falls to 0. */
   gboolean removed = g_hash_table_remove (session_by_user_id, userid_to_key (user_id));
-  g_assert (removed);
+
+  if (!removed)
+    g_warning ("No running timer for user ID %" G_GUINT32_FORMAT, user_id);
 }
 
 /*
