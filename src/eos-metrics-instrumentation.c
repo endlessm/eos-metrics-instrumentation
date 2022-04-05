@@ -1,4 +1,4 @@
-/* Copyright 2014, 2015 Endless Mobile, Inc. */
+/* Copyright 2014, 2015 Endless OS Foundation LLC. */
 
 /* This file is part of eos-metrics-instrumentation.
  *

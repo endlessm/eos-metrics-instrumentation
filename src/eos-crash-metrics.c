@@ -1,4 +1,4 @@
-/* Copyright © 2017, 2020 Endless Mobile, Inc.
+/* Copyright © 2017, 2020 Endless OS Foundation LLC.
  *
  * This file is part of eos-metrics-instrumentation.
  *
