@@ -173,6 +173,10 @@ add_session (guint32 user_id)
 static void
 remove_session (guint32 user_id)
 {
+  /*  Only care about real humans */
+  if (user_id < MIN_HUMAN_USER_ID)
+    return;
+
   /* The timer will stop itself when its reference count falls to 0. */
   gboolean removed = g_hash_table_remove (session_by_user_id, userid_to_key (user_id));
   g_assert (removed);
