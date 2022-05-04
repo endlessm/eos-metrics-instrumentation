@@ -1,0 +1,5 @@
+Format: http://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: eos-metrics-instrumentation
+Upstream-Contact: Endless OS Team <maintainers@endlessos.org>
+Copyright: Copyright 2014–2022 Endless OS Foundation LLC. All rights reserved.
+License: GPL-2+
