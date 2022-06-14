@@ -105,7 +105,7 @@
 #define RECORD_COMPUTER_HWINFO_INTERVAL_USECONDS G_TIME_SPAN_DAY
 
 /* The path of a file to hold next record time. */
-#define RECORD_TIME_FILE_PATH INSTRUMENTATION_CACHE_DIR "record_time"
+#define RECORD_TIME_FILE_PATH INSTRUMENTATION_CACHE_DIR "/record_time"
 
 static gint64
 get_next_record_time (void)
