@@ -396,7 +396,6 @@ eins_hwinfo_get_cpu_info (void)
 {
   g_autoptr(GSubprocess) lscpu = NULL;
   g_autoptr(GBytes) lscpu_stdout = NULL;
-  g_autoptr(JsonParser) parser = json_parser_new ();
   const gchar *json_data = NULL;
   gsize json_size;
   g_autoptr(GError) error = NULL;
