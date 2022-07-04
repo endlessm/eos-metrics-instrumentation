@@ -20,4 +20,8 @@ test_hwinfo = executable(
     install: false,
 )
 
-test('test-hwinfo', test_hwinfo)
+test(
+    'test-hwinfo',
+    test_hwinfo,
+    protocol: 'tap',
+)
