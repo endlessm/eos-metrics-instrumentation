@@ -6,7 +6,7 @@ configure_file(
         'libexecdir': libexec_dir,
     }),
     install: true,
-    install_dir: systemd_dep.get_pkgconfig_variable('systemdsystemunitdir'),
+    install_dir: systemd_dep.get_variable(pkgconfig: 'systemdsystemunitdir'),
 )
 
 # tmpfiles rules
@@ -17,7 +17,7 @@ configure_file(
         'instrumentationcachedir': instrumentation_cache_dir,
     }),
     install: true,
-    install_dir: systemd_dep.get_pkgconfig_variable('tmpfilesdir'),
+    install_dir: systemd_dep.get_variable(pkgconfig: 'tmpfilesdir'),
 )
 
 # sysctl configuration
@@ -28,5 +28,5 @@ configure_file(
         'libexecdir': libexec_dir,
     }),
     install: true,
-    install_dir: systemd_dep.get_pkgconfig_variable('sysctldir'),
+    install_dir: systemd_dep.get_variable(pkgconfig: 'sysctldir'),
 )
