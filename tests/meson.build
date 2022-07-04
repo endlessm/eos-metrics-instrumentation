@@ -1,13 +1,10 @@
-test_sources = {
-    'test-hwinfo': [],
-}
+test_hwinfo = executable(
+    'test-hwinfo',
+    ['test-hwinfo.c'],
+    dependencies: [
+        internal_library_dep,
+    ],
+    install: false,
+)
 
-foreach name, sources : test_sources
-    test(name,
-        executable(name,
-            sources + ['@0@.c'.format(name)],
-            dependencies: internal_library_dep,
-            install: false,
-        )
-    )
-endforeach
+test('test-hwinfo', test_hwinfo)
