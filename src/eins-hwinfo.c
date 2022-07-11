@@ -394,15 +394,27 @@ eins_hwinfo_parse_lscpu_json (const gchar *json_data,
 GVariant *
 eins_hwinfo_get_cpu_info (void)
 {
+  g_autoptr(GSubprocessLauncher) launcher = NULL;
   g_autoptr(GSubprocess) lscpu = NULL;
   g_autoptr(GBytes) lscpu_stdout = NULL;
-  g_autoptr(JsonParser) parser = json_parser_new ();
   const gchar *json_data = NULL;
   gsize json_size;
   g_autoptr(GError) error = NULL;
 
-  lscpu = g_subprocess_new (G_SUBPROCESS_FLAGS_STDOUT_PIPE, &error,
-                            "lscpu", "--json", NULL);
+  launcher = g_subprocess_launcher_new (G_SUBPROCESS_FLAGS_STDOUT_PIPE);
+  /* In some versions of lscpu, some (but not all!) of the numerical fields in
+   * the output are locale-sensitive. In (for instance) a French locale, comma
+   * (,) is used as the decimal separator rather than full stop (.). This does
+   * not render the JSON invalid: the numbers are in JSON strings. But it does
+   * make parsing them more complicated.
+   *
+   * This is fixed in util-linux but not (at the time of writing) in Endless
+   * OS's version. https://github.com/util-linux/util-linux/issues/1743
+   * For older versions, force the C locale for numeric output.
+   */
+  g_subprocess_launcher_setenv (launcher, "LC_NUMERIC", "C", /* overwrite */ TRUE);
+  lscpu = g_subprocess_launcher_spawn (launcher, &error,
+                                       "lscpu", "--json", NULL);
   if (lscpu == NULL
       || !g_subprocess_communicate (lscpu,
                                     NULL /* stdin */,

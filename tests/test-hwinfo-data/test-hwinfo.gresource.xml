@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gresources>
+  <gresource prefix="/com/endlessm/MetricsInstrumentation/cpuinfo">
+    <file>bad-malformed.json</file>
+    <file>bad-missing-fields.json</file>
+    <file>bad-wrong-data-type.json</file>
+    <file>bad-wrong-structure-1.json</file>
+    <file>bad-wrong-structure-2.json</file>
+    <file>bad-wrong-structure-3.json</file>
+    <file>bad-wrong-structure-4.json</file>
+    <file>bad-wrong-structure-5.json</file>
+    <file>bad-wrong-structure-6.json</file>
+    <file>bad-wrong-structure-7.json</file>
+    <file>bad-wrong-structure-8.json</file>
+    <file>bad-wrong-structure-9.json</file>
+    <file>good-no-cpu-max-mhz.json</file>
+    <file>good-rockchip.json</file>
+    <file>good-xps13.json</file>
+  </gresource>
+</gresources>

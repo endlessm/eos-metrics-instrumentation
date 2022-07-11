@@ -83,36 +83,6 @@ test_get_ram_size_for_current_system (void)
   assert_ram_size (size);
 }
 
-static const char *XPS_13_9343_JSON =
-    "{"
-    "   \"lscpu\": ["
-    "      {\"field\": \"Architecture:\", \"data\": \"x86_64\"},"
-    "      {\"field\": \"CPU op-mode(s):\", \"data\": \"32-bit, 64-bit\"},"
-    "      {\"field\": \"Byte Order:\", \"data\": \"Little Endian\"},"
-    "      {\"field\": \"CPU(s):\", \"data\": \"4\"},"
-    "      {\"field\": \"On-line CPU(s) list:\", \"data\": \"0-3\"},"
-    "      {\"field\": \"Thread(s) per core:\", \"data\": \"2\"},"
-    "      {\"field\": \"Core(s) per socket:\", \"data\": \"2\"},"
-    "      {\"field\": \"Socket(s):\", \"data\": \"1\"},"
-    "      {\"field\": \"NUMA node(s):\", \"data\": \"1\"},"
-    "      {\"field\": \"Vendor ID:\", \"data\": \"GenuineIntel\"},"
-    "      {\"field\": \"CPU family:\", \"data\": \"6\"},"
-    "      {\"field\": \"Model:\", \"data\": \"61\"},"
-    "      {\"field\": \"Model name:\", \"data\": \"Intel(R) Core(TM) i7-5500U CPU @ 2.40GHz\"},"
-    "      {\"field\": \"Stepping:\", \"data\": \"4\"},"
-    "      {\"field\": \"CPU MHz:\", \"data\": \"1448.337\"},"
-    "      {\"field\": \"CPU max MHz:\", \"data\": \"3000.0000\"},"
-    "      {\"field\": \"CPU min MHz:\", \"data\": \"500.0000\"},"
-    "      {\"field\": \"BogoMIPS:\", \"data\": \"4788.89\"},"
-    "      {\"field\": \"Virtualization:\", \"data\": \"VT-x\"},"
-    "      {\"field\": \"L1d cache:\", \"data\": \"32K\"},"
-    "      {\"field\": \"L1i cache:\", \"data\": \"32K\"},"
-    "      {\"field\": \"L2 cache:\", \"data\": \"256K\"},"
-    "      {\"field\": \"L3 cache:\", \"data\": \"4096K\"},"
-    "      {\"field\": \"NUMA node0 CPU(s):\", \"data\": \"0-3\"},"
-    "      {\"field\": \"Flags:\", \"data\": \"fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe syscall nx pdpe1gb rdtscp lm constant_tsc arch_perfmon pebs bts rep_good nopl xtopology nonstop_tsc cpuid aperfmperf pni pclmulqdq dtes64 monitor ds_cpl vmx est tm2 ssse3 sdbg fma cx16 xtpr pdcm pcid sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand lahf_lm abm 3dnowprefetch cpuid_fault epb invpcid_single pti tpr_shadow vnmi flexpriority ept vpid fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid rdseed adx smap intel_pt xsaveopt ibpb ibrs stibp dtherm ida arat pln pts\"}"
-    "   ]"
-    "}";
 static const char *XPS_13_9343_VARIANT =
     "[("
     "  'Intel(R) Core(TM) i7-5500U CPU @ 2.40GHz',"
@@ -120,17 +90,6 @@ static const char *XPS_13_9343_VARIANT =
     "  3000."
     ")]";
 
-/* Substantially trimmed output when run within VirtualBox on the machine
- * above. The main point is that "CPU max MHz:" was not present.
- */
-static const char *NO_CPU_MAX_MHZ_JSON =
-    "{"
-    "   \"lscpu\": ["
-    "      {\"field\": \"CPU(s):\", \"data\": \"1\"},"
-    "      {\"field\": \"Model name:\", \"data\": \"Intel(R) Core(TM) i7-5500U CPU @ 2.40GHz\"},"
-    "      {\"field\": \"CPU MHz:\", \"data\": \"2385.484\"}"
-    "   ]"
-    "}";
 static const char *NO_CPU_MAX_MHZ_VARIANT =
     "[("
     "  'Intel(R) Core(TM) i7-5500U CPU @ 2.40GHz',"
@@ -138,60 +97,13 @@ static const char *NO_CPU_MAX_MHZ_VARIANT =
     "  2385.484"
     ")]";
 
-static const char *ROCKCHIP_JSON =
-    "{"
-    "   \"lscpu\": ["
-    "      {\"field\": \"Architecture:\", \"data\": \"armv7l\"},"
-    "      {\"field\": \"Byte Order:\", \"data\": \"Little Endian\"},"
-    "      {\"field\": \"CPU(s):\", \"data\": \"4\"},"
-    "      {\"field\": \"On-line CPU(s) list:\", \"data\": \"0-3\"},"
-    "      {\"field\": \"Thread(s) per core:\", \"data\": \"1\"},"
-    "      {\"field\": \"Core(s) per socket:\", \"data\": \"4\"},"
-    "      {\"field\": \"Socket(s):\", \"data\": \"1\"},"
-    "      {\"field\": \"Vendor ID:\", \"data\": \"ARM\"},"
-    "      {\"field\": \"Model:\", \"data\": \"1\"},"
-    "      {\"field\": \"Model name:\", \"data\": \"Cortex-A12\"},"
-    "      {\"field\": \"Stepping:\", \"data\": \"r0p1\"},"
-    "      {\"field\": \"CPU max MHz:\", \"data\": \"1608.0000\"},"
-    "      {\"field\": \"CPU min MHz:\", \"data\": \"126.0000\"},"
-    "      {\"field\": \"BogoMIPS:\", \"data\": \"35.82\"},"
-    "      {\"field\": \"Flags:\", \"data\": \"half thumb fastmult vfp edsp thumbee neon vfpv3 tls vfpv4 idiva idivt vfpd32 lpae evtstrm\"}"
-    "   ]"
-    "}";
 static const char *ROCKCHIP_VARIANT = "[('Cortex-A12', 4,  1608.)]";
-
-static const char *MALFORMED_JSON = "{";
-static const char *WRONG_STRUCTURE_JSON_1 = "[]";
-static const char *WRONG_STRUCTURE_JSON_2 = "{}";
-static const char *WRONG_STRUCTURE_JSON_3 = "{\"lscpu\": true}";
-static const char *WRONG_STRUCTURE_JSON_4 = "{\"lscpu\": [true]}";
-static const char *WRONG_STRUCTURE_JSON_5 = "{\"lscpu\": [{}]}";
-/* no field */
-static const char *WRONG_STRUCTURE_JSON_6 = "{\"lscpu\": [{\"data\": \"x\"}]}";
-/* no data */
-static const char *WRONG_STRUCTURE_JSON_7 = "{\"lscpu\": [{\"field\": \"Model name:\"}]}";
-/* field's value is not a string, or even a scalar */
-static const char *WRONG_STRUCTURE_JSON_8 = "{\"lscpu\": [{\"field\": {}, \"data\": \"\"}]}";
-/* data's value is not a string, or even a scalar */
-static const char *WRONG_STRUCTURE_JSON_9 = "{\"lscpu\": [{\"field\": \"Model name:\", \"data\": {}}]}";
-
-/* Well-formed, and the right shape, but the fields we expect are missing. */
-static const char *MISSING_FIELDS_JSON = "{\"lscpu\": []}";
-static const char *WRONG_DATA_TYPE_JSON =
-  "{"
-  "  \"lscpu\": ["
-  "    {\"field\": \"Model name:\", \"data\": \"hello\"},"
-  "    {\"field\": \"CPU(s):\", \"data\": \"3.14\"},"
-  "    {\"field\": \"CPU max MHz:\", \"data\": \"extremely fast\"}"
-  "  ]"
-  "}";
 static const char *WRONG_DATA_TYPE_VARIANT = "[('hello', 0, 0)]";
-
 static const char *FALLBACK_VARIANT = "[('', 0, 0)]";
 
 typedef struct _CpuTestData {
     const gchar *testpath;
-    const gchar *json;
+    const gchar *json_resource_name;
     const gchar *expected_str;
 } CpuTestData;
 
@@ -200,8 +112,22 @@ test_parse_lscpu_json (const CpuTestData *data)
 {
   g_autoptr(GVariant) actual, expected;
   g_autoptr(GError) error = NULL;
+  g_autoptr(GBytes) bytes = NULL;
+  g_autofree gchar *resource_path = NULL;
+  const char *json = NULL;
+  gsize size = -1;
 
-  actual = eins_hwinfo_parse_lscpu_json (data->json, -1);
+  resource_path = g_strjoin ("/",
+                             "/com/endlessm/MetricsInstrumentation/cpuinfo",
+                             data->json_resource_name,
+                             NULL);
+  bytes = g_resources_lookup_data (resource_path,
+                                   G_RESOURCE_LOOKUP_FLAGS_NONE,
+                                   &error);
+  g_assert_no_error (error);
+  json = g_bytes_get_data (bytes, &size);
+
+  actual = eins_hwinfo_parse_lscpu_json (json, size);
   g_assert_nonnull (actual);
 
   expected = g_variant_parse (G_VARIANT_TYPE ("a(sqd)"), data->expected_str,
@@ -267,23 +193,32 @@ main (int   argc,
       char *argv[])
 {
   const CpuTestData cpu_test_datas[] = {
-      { "/hwinfo/cpu/bad/malformed", MALFORMED_JSON, FALLBACK_VARIANT },
-      { "/hwinfo/cpu/bad/wrong-structure/1", WRONG_STRUCTURE_JSON_1, FALLBACK_VARIANT },
-      { "/hwinfo/cpu/bad/wrong-structure/2", WRONG_STRUCTURE_JSON_2, FALLBACK_VARIANT },
-      { "/hwinfo/cpu/bad/wrong-structure/3", WRONG_STRUCTURE_JSON_3, FALLBACK_VARIANT },
-      { "/hwinfo/cpu/bad/wrong-structure/4", WRONG_STRUCTURE_JSON_4, FALLBACK_VARIANT },
-      { "/hwinfo/cpu/bad/wrong-structure/5", WRONG_STRUCTURE_JSON_5, FALLBACK_VARIANT },
-      { "/hwinfo/cpu/bad/wrong-structure/6", WRONG_STRUCTURE_JSON_6, FALLBACK_VARIANT },
-      { "/hwinfo/cpu/bad/wrong-structure/7", WRONG_STRUCTURE_JSON_7, FALLBACK_VARIANT },
-      { "/hwinfo/cpu/bad/wrong-structure/8", WRONG_STRUCTURE_JSON_8, FALLBACK_VARIANT },
-      { "/hwinfo/cpu/bad/wrong-structure/9", WRONG_STRUCTURE_JSON_9, FALLBACK_VARIANT },
+      { "/hwinfo/cpu/bad/malformed", "bad-malformed.json", FALLBACK_VARIANT },
+      { "/hwinfo/cpu/bad/wrong-structure/1", "bad-wrong-structure-1.json", FALLBACK_VARIANT },
+      { "/hwinfo/cpu/bad/wrong-structure/2", "bad-wrong-structure-2.json", FALLBACK_VARIANT },
+      { "/hwinfo/cpu/bad/wrong-structure/3", "bad-wrong-structure-3.json", FALLBACK_VARIANT },
+      { "/hwinfo/cpu/bad/wrong-structure/4", "bad-wrong-structure-4.json", FALLBACK_VARIANT },
+      { "/hwinfo/cpu/bad/wrong-structure/5", "bad-wrong-structure-5.json", FALLBACK_VARIANT },
+      /* no field */
+      { "/hwinfo/cpu/bad/wrong-structure/6", "bad-wrong-structure-6.json", FALLBACK_VARIANT },
+      /* no data */
+      { "/hwinfo/cpu/bad/wrong-structure/7", "bad-wrong-structure-7.json", FALLBACK_VARIANT },
+      /* field's value is not a string, or even a scalar */
+      { "/hwinfo/cpu/bad/wrong-structure/8", "bad-wrong-structure-8.json", FALLBACK_VARIANT },
+      /* data's value is not a string, or even a scalar */
+      { "/hwinfo/cpu/bad/wrong-structure/9", "bad-wrong-structure-9.json", FALLBACK_VARIANT },
 
-      { "/hwinfo/cpu/bad/missing-fields", MISSING_FIELDS_JSON, FALLBACK_VARIANT },
-      { "/hwinfo/cpu/bad/wrong-data-type", WRONG_DATA_TYPE_JSON, WRONG_DATA_TYPE_VARIANT },
+      /* Well-formed, and the right shape, but the fields we expect are missing. */
+      { "/hwinfo/cpu/bad/missing-fields", "bad-missing-fields.json", FALLBACK_VARIANT },
 
-      { "/hwinfo/cpu/good/xps13", XPS_13_9343_JSON, XPS_13_9343_VARIANT },
-      { "/hwinfo/cpu/good/no-cpu-max-mhz", NO_CPU_MAX_MHZ_JSON, NO_CPU_MAX_MHZ_VARIANT },
-      { "/hwinfo/cpu/good/rockchip", ROCKCHIP_JSON, ROCKCHIP_VARIANT },
+      { "/hwinfo/cpu/bad/wrong-data-type", "bad-wrong-data-type.json", WRONG_DATA_TYPE_VARIANT },
+
+      { "/hwinfo/cpu/good/xps13", "good-xps13.json", XPS_13_9343_VARIANT },
+      /* Substantially trimmed output when run within VirtualBox on the machine
+       * above. The main point is that "CPU max MHz:" was not present.
+       */
+      { "/hwinfo/cpu/good/no-cpu-max-mhz", "good-no-cpu-max-mhz.json", NO_CPU_MAX_MHZ_VARIANT },
+      { "/hwinfo/cpu/good/rockchip", "good-rockchip.json", ROCKCHIP_VARIANT },
   };
   size_t i;
 

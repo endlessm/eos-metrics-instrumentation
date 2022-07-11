@@ -1,0 +1,7 @@
+{
+   "lscpu": [
+      {"field": "CPU(s):", "data": "1"},
+      {"field": "Model name:", "data": "Intel(R) Core(TM) i7-5500U CPU @ 2.40GHz"},
+      {"field": "CPU MHz:", "data": "2385.484"}
+   ]
+}
