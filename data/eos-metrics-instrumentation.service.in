@@ -6,6 +6,7 @@ After=eos-metrics-event-recorder.service
 [Service]
 Type=simple
 ExecStart=@libexecdir@/eos-metrics-instrumentation
+User=metrics
 
 [Install]
 WantedBy=multi-user.target
