@@ -26,11 +26,13 @@ daemon = executable('eos-metrics-instrumentation',
     install_dir: libexec_dir,
 )
 
-crash_metrics = executable('eos-crash-metrics',
-    dependencies: common_deps,
-    sources: [
-        'eos-crash-metrics.c',
-    ],
-    install: true,
-    install_dir: libexec_dir,
-)
+if get_option('crash_metrics').enabled()
+    crash_metrics = executable('eos-crash-metrics',
+        dependencies: common_deps,
+        sources: [
+            'eos-crash-metrics.c',
+        ],
+        install: true,
+        install_dir: libexec_dir,
+    )
+endif

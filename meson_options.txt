@@ -1,0 +1,5 @@
+option('crash_metrics',
+  type: 'feature',
+  value: 'enabled',
+  description: 'Enable crash metrics, which breaks systemd-coredump'
+)
