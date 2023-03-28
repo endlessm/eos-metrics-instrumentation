@@ -20,13 +20,15 @@ configure_file(
     install_dir: systemd_dep.get_variable(pkgconfig: 'tmpfilesdir'),
 )
 
-# sysctl configuration
-configure_file(
-    input: '90-eos-crash-metrics.conf.in',
-    output: '90-eos-crash-metrics.conf',
-    configuration: configuration_data({
-        'libexecdir': libexec_dir,
-    }),
-    install: true,
-    install_dir: systemd_dep.get_variable(pkgconfig: 'sysctldir'),
-)
+if get_option('crash_metrics').enabled()
+    # sysctl configuration
+    configure_file(
+        input: '90-eos-crash-metrics.conf.in',
+        output: '90-eos-crash-metrics.conf',
+        configuration: configuration_data({
+            'libexecdir': libexec_dir,
+        }),
+        install: true,
+        install_dir: systemd_dep.get_variable(pkgconfig: 'sysctldir'),
+    )
+endif
