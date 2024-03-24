@@ -2,6 +2,7 @@
    "lscpu": [
       {"field": "Model name:", "data": "hello"},
       {"field": "CPU(s):", "data": "3.14"},
-      {"field": "CPU max MHz:", "data": "extremely fast"}
+      {"field": "CPU max MHz:", "data": "extremely fast"},
+      {"field": "Flags:", "data": "hi"}
    ]
 }
