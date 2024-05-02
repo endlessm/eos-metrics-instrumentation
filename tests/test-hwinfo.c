@@ -100,6 +100,7 @@ static const char *NO_CPU_MAX_MHZ_VARIANT =
     ")]";
 
 static const char *ROCKCHIP_VARIANT = "[('Cortex-A12', 4,  1608., 'half thumb fastmult vfp edsp thumbee neon vfpv3 tls vfpv4 idiva idivt vfpd32 lpae evtstrm')]";
+static const char *RPI4B_VARIANT = "[('Cortex-A72', 4, 1800., 'fp asimd evtstrm crc32 cpuid')]";
 static const char *WRONG_DATA_TYPE_VARIANT = "[('hello', 0, 0, 'hi')]";
 static const char *FALLBACK_VARIANT = "[('', 0, 0, '')]";
 
@@ -223,6 +224,7 @@ main (int   argc,
        */
       { "/hwinfo/cpu/good/no-cpu-max-mhz", "good-no-cpu-max-mhz.json", NO_CPU_MAX_MHZ_VARIANT },
       { "/hwinfo/cpu/good/rockchip", "good-rockchip.json", ROCKCHIP_VARIANT },
+      { "/hwinfo/cpu/good/rpi4b", "good-rpi4b.json", RPI4B_VARIANT },
   };
   size_t i;
 
