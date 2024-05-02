@@ -79,6 +79,7 @@
  *     0 | string | Human-readable CPU model | ''
  *     1 | uint16 | Number of cores/threads  | 0
  *     2 | double | Maximum¹ speed in MHz    | 0.
+ *     3 | string | CPU instruction extensions flags | ''
  *
  * ¹ If the maximum speed can't be determined, we report the current speed
  *   instead, if known.
@@ -95,7 +96,7 @@
  * current implementation only reports the currently-active cores.
  */
 
-#define CPUINFO_TYPE_STRING "(sqd)"
+#define CPUINFO_TYPE_STRING "(sqds)"
 #define CPUINFO_ARRAY_TYPE_STRING "a" CPUINFO_TYPE_STRING
 
 #define COMPUTER_HWINFO_TYPE_STRING "(" RAMINFO_TYPE_STRING \
@@ -249,6 +250,8 @@ static const LscpuFieldType LSCPU_FIELDS[] = {
   { { "CPU(s):", NULL }, G_VARIANT_TYPE_UINT16, "0" },
   /* From manual testing, CPU max MHz is not know within a VirtualBox VM. */
   { { "CPU max MHz:", "CPU MHz:", NULL }, G_VARIANT_TYPE_DOUBLE, "0" },
+  /* Know what cpu instruction extensions are supported */
+  { { "Flags:", NULL }, NULL, "" },
 };
 static const gsize NUM_LSCPU_FIELDS = G_N_ELEMENTS (LSCPU_FIELDS);
 

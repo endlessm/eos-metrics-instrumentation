@@ -15,6 +15,7 @@
     <file>bad-wrong-structure-9.json</file>
     <file>good-no-cpu-max-mhz.json</file>
     <file>good-rockchip.json</file>
+    <file>good-rpi4b.json</file>
     <file>good-xps13.json</file>
   </gresource>
 </gresources>
