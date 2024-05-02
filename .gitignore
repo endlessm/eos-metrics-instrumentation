@@ -1,0 +1,5 @@
+/debian/.debhelper/
+/debian/debhelper-build-stamp
+/debian/eos-metrics-instrumentation.substvars
+/debian/eos-metrics-instrumentation/
+/debian/files

@@ -13,6 +13,7 @@ Build-Depends:
 	meson,
 	python3-dbus,
 	python3-dbusmock,
+	systemd-dev,
 	util-linux (>= 2.32),
 
 Package: eos-metrics-instrumentation
