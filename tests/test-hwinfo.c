@@ -87,19 +87,22 @@ static const char *XPS_13_9343_VARIANT =
     "[("
     "  'Intel(R) Core(TM) i7-5500U CPU @ 2.40GHz',"
     "  4,"
-    "  3000."
+    "  3000.,"
+    "  'fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe syscall nx pdpe1gb rdtscp lm constant_tsc arch_perfmon pebs bts rep_good nopl xtopology nonstop_tsc cpuid aperfmperf pni pclmulqdq dtes64 monitor ds_cpl vmx est tm2 ssse3 sdbg fma cx16 xtpr pdcm pcid sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand lahf_lm abm 3dnowprefetch cpuid_fault epb invpcid_single pti tpr_shadow vnmi flexpriority ept vpid fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid rdseed adx smap intel_pt xsaveopt ibpb ibrs stibp dtherm ida arat pln pts'"
     ")]";
 
 static const char *NO_CPU_MAX_MHZ_VARIANT =
     "[("
     "  'Intel(R) Core(TM) i7-5500U CPU @ 2.40GHz',"
     "  1,"
-    "  2385.484"
+    "  2385.484,"
+    "  'fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe syscall nx pdpe1gb rdtscp lm constant_tsc arch_perfmon pebs bts rep_good nopl xtopology nonstop_tsc cpuid aperfmperf pni pclmulqdq dtes64 monitor ds_cpl vmx est tm2 ssse3 sdbg fma cx16 xtpr pdcm pcid sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand lahf_lm abm 3dnowprefetch cpuid_fault epb invpcid_single pti tpr_shadow vnmi flexpriority ept vpid fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid rdseed adx smap intel_pt xsaveopt ibpb ibrs stibp dtherm ida arat pln pts'"
     ")]";
 
-static const char *ROCKCHIP_VARIANT = "[('Cortex-A12', 4,  1608.)]";
-static const char *WRONG_DATA_TYPE_VARIANT = "[('hello', 0, 0)]";
-static const char *FALLBACK_VARIANT = "[('', 0, 0)]";
+static const char *ROCKCHIP_VARIANT = "[('Cortex-A12', 4,  1608., 'half thumb fastmult vfp edsp thumbee neon vfpv3 tls vfpv4 idiva idivt vfpd32 lpae evtstrm')]";
+static const char *RPI4B_VARIANT = "[('Cortex-A72', 4, 1800., 'fp asimd evtstrm crc32 cpuid')]";
+static const char *WRONG_DATA_TYPE_VARIANT = "[('hello', 0, 0, 'hi')]";
+static const char *FALLBACK_VARIANT = "[('', 0, 0, '')]";
 
 typedef struct _CpuTestData {
     const gchar *testpath;
@@ -130,7 +133,7 @@ test_parse_lscpu_json (const CpuTestData *data)
   actual = eins_hwinfo_parse_lscpu_json (json, size);
   g_assert_nonnull (actual);
 
-  expected = g_variant_parse (G_VARIANT_TYPE ("a(sqd)"), data->expected_str,
+  expected = g_variant_parse (G_VARIANT_TYPE ("a(sqds)"), data->expected_str,
                               NULL, NULL, &error);
   g_assert_no_error (error);
 
@@ -147,15 +150,17 @@ assert_cpu_info_for_current_system (GVariant *cpu_payload)
   const gchar *model;
   guint16 n_cpus;
   gdouble max_mhz;
+  const gchar *flags;
 
   g_assert_nonnull (cpu_payload);
-  g_assert_cmpstr (g_variant_get_type_string (cpu_payload), ==, "a(sqd)");
+  g_assert_cmpstr (g_variant_get_type_string (cpu_payload), ==, "a(sqds)");
   g_assert_cmpuint (g_variant_n_children (cpu_payload), >=, 1);
 
-  g_variant_get_child (cpu_payload, 0, "(&sqd)", &model, &n_cpus, &max_mhz);
+  g_variant_get_child (cpu_payload, 0, "(&sqds)", &model, &n_cpus, &max_mhz, &flags);
   g_assert_cmpstr (model, !=, "");
   g_assert_cmpuint (n_cpus, >, 0);
   g_assert_cmpfloat (max_mhz, >=, 0);
+  g_assert_cmpstr (flags, !=, "");
 }
 
 /* Just verify that we can launch lscpu, parse its output, and get something
@@ -178,9 +183,9 @@ test_get_computer_hwinfo (void)
   g_autoptr(GVariant) cpu_payload;
 
   g_assert_nonnull (payload);
-  g_assert_cmpstr (g_variant_get_type_string (payload), ==, "(uuuua(sqd))");
+  g_assert_cmpstr (g_variant_get_type_string (payload), ==, "(uuuua(sqds))");
 
-  g_variant_get (payload, "(uuuu@a(sqd))", &ram_size,
+  g_variant_get (payload, "(uuuu@a(sqds))", &ram_size,
                  &dspace.total, &dspace.used, &dspace.free, &cpu_payload);
 
   assert_ram_size (ram_size);
@@ -219,6 +224,7 @@ main (int   argc,
        */
       { "/hwinfo/cpu/good/no-cpu-max-mhz", "good-no-cpu-max-mhz.json", NO_CPU_MAX_MHZ_VARIANT },
       { "/hwinfo/cpu/good/rockchip", "good-rockchip.json", ROCKCHIP_VARIANT },
+      { "/hwinfo/cpu/good/rpi4b", "good-rpi4b.json", RPI4B_VARIANT },
   };
   size_t i;
 
